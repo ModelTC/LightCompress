@@ -129,7 +129,7 @@ class DivPrune(TokenReductionModule):
                 token_indices = input_ids[0][attention_mask[0]] == IMAGE_TOKEN_INDEX
                 pruning_paras['image_token_start_index'] = torch.where(token_indices)[
                     0
-                ].item()
+                ][0].item()
 
                 outputs = fn(*args, **kwargs)
 
