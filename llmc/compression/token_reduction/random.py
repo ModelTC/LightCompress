@@ -3,6 +3,7 @@ from functools import wraps
 from types import MethodType
 
 import torch
+from loguru import logger
 
 from llmc.utils.registry_factory import TOKEN_REDUCTION_REGISTRY
 
@@ -62,6 +63,8 @@ class RandomPrune(TokenReductionModule):
         @prefill_wrapper
         def random_pruning_hook(module, args, kwargs, pruning_paras):
 
+            logger.info(' ========random_pruning_hook======== ')
+
             rate = pruning_paras['rate']
             image_token_start_index = pruning_paras['image_token_start_index']
             image_token_length = pruning_paras['image_token_length']
@@ -69,15 +72,28 @@ class RandomPrune(TokenReductionModule):
             hidden_states = args[0]
             causal_mask = kwargs['attention_mask']
 
+            logger.info(f'before hidden_states : {hidden_states.shape}')
+
             device = hidden_states.device
-            vision_indexes = torch.arange(
-                image_token_start_index,
-                image_token_start_index + image_token_length,
-                device=device,
-            )
-            num_keep = round(image_token_length * (1 - rate))
-            rand_idx = torch.randperm(image_token_length, device=device)[:num_keep]
-            vision_indexes = vision_indexes[rand_idx]
+
+            if self.model.first_turn_question:
+                logger.info(' -----first_turn_question-----')
+                vision_indexes = torch.arange(
+                    image_token_start_index,
+                    image_token_start_index + image_token_length,
+                    device=device,
+                )
+                num_keep = round(image_token_length * (1 - rate))
+                rand_idx = torch.randperm(image_token_length, device=device)[:num_keep]
+                vision_indexes = vision_indexes[rand_idx]
+
+                # save vision_indexes to module
+                module.register_buffer('vision_indexes', vision_indexes)
+            else:
+                logger.info(' -----not first_turn_question-----')
+                # load vision_indexes from module (prompt cache)
+                vision_indexes = module.vision_indexes
+
             # keep index
             keep_indexs = torch.cat(
                 (
@@ -115,6 +131,7 @@ class RandomPrune(TokenReductionModule):
             position_embeddings[0].resize_as_(new_pe0).copy_(new_pe0)
             position_embeddings[1].resize_as_(new_pe0).copy_(new_pe1)
 
+            logger.info(f'after hidden_states : {hidden_states.shape}')
             return (hidden_states,), kwargs
 
         if self.model.__class__.__name__ == 'LlavaHf':

@@ -3,9 +3,9 @@ import os
 
 from loguru import logger
 
-from llmc.eval import (AccuracyEval, CustomGenerate, DecodePerplexityEval,
-                       HumanEval, PerplexityEval, TokenConsistencyEval,
-                       VideoGenerateEval, VQAEval)
+from llmc.eval import (AccuracyEval, CustomGenerate, CustomGenerateJustInfer,
+                       DecodePerplexityEval, HumanEval, PerplexityEval,
+                       TokenConsistencyEval, VideoGenerateEval, VQAEval)
 from llmc.utils import deploy_all_modality
 
 
@@ -57,6 +57,8 @@ def get_eval_list(model, config):
                             eval_class = HumanEval(model, config_for_eval)
                         elif config_tmp.eval.type == 'generate_only':
                             eval_class = CustomGenerate(model, config_for_eval)
+                        elif config_tmp.eval.type == 'just_infer':
+                            eval_class = CustomGenerateJustInfer(model, config_for_eval)
                         elif config_tmp.eval.type == 'token_acc':
                             eval_class = TokenConsistencyEval(model, config_for_eval)
                         elif config_tmp.eval.type == 'ppl':
