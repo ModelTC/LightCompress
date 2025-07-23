@@ -251,6 +251,13 @@ class SparseVLM(TokenReductionModule):
                 text_token_start = prompt_length + image_shape
                 policy[batch, text_token_start:] = 1
 
+            if self.model.first_turn_question:
+                vision_mask = policy[:, v_token_start:v_token_start + v_token_num]
+                module.register_buffer('vision_mask', vision_mask)
+            else:
+                vision_mask = module.vision_mask
+                policy[:, v_token_start:v_token_start + v_token_num] = vision_mask
+
             total_sparse_token_idx = torch.where(policy == 0)[1].unsqueeze(0)
 
             # merge and cluster

@@ -75,6 +75,7 @@ class Llava(Llama):
             'IMAGE_TOKEN_INDEX': IMAGE_TOKEN_INDEX,  # for llava
         }
         self.processor = None
+        self.first_turn_question = True
 
     def get_extra_rot_module_besides_embed_layers(self):
         return [self.vision_projector[2]]
@@ -162,8 +163,6 @@ class Llava(Llama):
                 image = load_image(image_file)
                 out.append(image)
             return out
-
-        self.first_turn_question = True
 
         for data_idx, questions in enumerate(img_qas):
             self.first_turn_question = True

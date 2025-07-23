@@ -323,6 +323,12 @@ class VisionZip(TokenReductionModule):
             mask = torch.ones_like(
                 hidden_states[:, :, 0], dtype=torch.bool, device=metric.device
             ).scatter_(1, all_indices, False)
+
+            if self.model.first_turn_question:
+                m.register_buffer('mask', mask)
+            else:
+                mask = m.mask
+
             dominant_tokens = hidden_states.masked_select(~mask.unsqueeze(-1)).view(
                 hidden_states.shape[0], dominant_num + 1, hidden_states.shape[2]
             )

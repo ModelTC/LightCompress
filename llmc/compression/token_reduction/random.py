@@ -76,23 +76,22 @@ class RandomPrune(TokenReductionModule):
 
             device = hidden_states.device
 
+            vision_indexes = torch.arange(
+                image_token_start_index,
+                image_token_start_index + image_token_length,
+                device=device,
+            )
             if self.model.first_turn_question:
-                logger.info(' -----first_turn_question-----')
-                vision_indexes = torch.arange(
-                    image_token_start_index,
-                    image_token_start_index + image_token_length,
-                    device=device,
-                )
                 num_keep = round(image_token_length * (1 - rate))
                 rand_idx = torch.randperm(image_token_length, device=device)[:num_keep]
                 vision_indexes = vision_indexes[rand_idx]
 
-                # save vision_indexes to module
-                module.register_buffer('vision_indexes', vision_indexes)
+                # save rand_idx to module
+                module.register_buffer('rand_idx', rand_idx)
             else:
-                logger.info(' -----not first_turn_question-----')
                 # load vision_indexes from module (prompt cache)
-                vision_indexes = module.vision_indexes
+                rand_idx = module.rand_idx
+                vision_indexes = vision_indexes[rand_idx]
 
             # keep index
             keep_indexs = torch.cat(

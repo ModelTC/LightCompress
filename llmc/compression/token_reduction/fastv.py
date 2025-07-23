@@ -90,6 +90,12 @@ class FastV(TokenReductionModule):
             top_attention_rank_index = \
                 last_layer_attention_avg_last_tok_image.topk(
                     round(image_token_length * (1 - rate))).indices + image_token_start_index
+
+            if self.model.first_turn_question:
+                module.register_buffer('top_attention_rank_index', top_attention_rank_index)
+            else:
+                top_attention_rank_index = module.top_attention_rank_index
+
             # keep index
             keep_indexs = torch.cat(
                 (

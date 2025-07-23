@@ -1,0 +1,29 @@
+base:
+    seed: &seed 42
+model:
+    type: Llava
+    path: model path
+    torch_dtype: auto
+eval:
+    eval_pos: [transformed] # transformed
+    name: custom_gen
+    type: just_infer
+    download: False
+    path: /data/nvme1/yongyang/projects/llmc_plus/general_custom_data
+    apply_chat_template: True
+    bs: 1
+    inference_per_block: False
+    max_new_tokens: 512
+    statistics: False
+sparse:
+    method: TokenReduction
+    special:
+        method: SparseVLM
+        pruning_loc: [2, 6, 15]
+        retained_tokens: 192
+        prune_flag: True
+        merge_flag: True
+save:
+    save_trans: False
+    save_fake: False
+    save_path: /path/to/save/
