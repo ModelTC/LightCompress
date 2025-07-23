@@ -47,6 +47,7 @@ class LlavaHf(Llama):
             'select_layer': self.vlm_model_config.vision_feature_layer,
             'select_feature': self.vlm_model_config.vision_feature_select_strategy,
             'image_token_index': self.vlm_model_config.image_token_index,
+            'vision_token_start_index': 35,
         }
 
         self.processor = AutoProcessor.from_pretrained(self.model_path)

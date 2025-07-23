@@ -63,17 +63,12 @@ def make_tome_class(transformer_class):
     class VisionZipTransformer(transformer_class):
         """
         Modifications:
-        - Initialize r, token size, and token sources.
+        - Initialize r
         """
-
-        def forward(self, *args, **kwdargs) -> torch.Tensor:
+        def forward(self, *args, **kwargs) -> torch.Tensor:
             self._info['r'] = parse_r(len(self.vision_model.encoder.layers), self.r)
             # self._info["r"] = self.r
-
-            self._info['size'] = None
-            self._info['source'] = None
-
-            return super().forward(*args, **kwdargs)
+            return super().forward(*args, **kwargs)
 
     return VisionZipTransformer
 
@@ -93,7 +88,6 @@ def apply_info(model, dominant_num, contextual_num):
     for module in model.modules():
         if isinstance(module, CLIPEncoderLayer):
             module.self_attn.k_proj._info = model._info
-            module.self_attn.k_proj.metric = None
 
 
 def add_post_hook_to_get_2dPool(model, post_hook_fn, pruning_paras):

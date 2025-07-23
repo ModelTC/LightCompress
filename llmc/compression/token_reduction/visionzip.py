@@ -1,4 +1,7 @@
 import functools
+import math
+from functools import wraps
+from types import MethodType
 from typing import Any, List, Optional, Tuple, Union
 
 import torch
@@ -9,7 +12,7 @@ from transformers.models.llava.modeling_llava import \
 from llmc.utils.registry_factory import TOKEN_REDUCTION_REGISTRY
 
 from .token_reduction_module import TokenReductionModule
-from .utils import apply_info
+from .utils import apply_info, prefill_wrapper
 
 
 def visionzip_forward(
@@ -231,55 +234,48 @@ def visionzip_forward(
     )
 
 
-def CLIP_EncoderLayer_forward(
+def Qwen2_5_VLVisionAttention_forward(
     self,
     hidden_states: torch.Tensor,
-    attention_mask: torch.Tensor,
-    causal_attention_mask: torch.Tensor,
-    output_attentions: Optional[bool] = False,
-) -> Tuple[torch.FloatTensor]:
-    # docformatter: off
-    """
-    Args:
-        hidden_states (`torch.FloatTensor`): input to the layer
-            `(batch, seq_len, embed_dim)`
-        attention_mask (`torch.FloatTensor`): attention mask of size
-            `(batch, 1, tgt_len, src_len)`
-            `(config.encoder_attention_heads,)`.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers.
-            See `attentions` under
-            returned tensors for more detail.
-    """
-    # docformatter: on
-    residual = hidden_states
+    pruning_paras,
+    cu_seqlens: torch.Tensor,
+    rotary_pos_emb: Optional[torch.Tensor] = None,
+    position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+) -> torch.Tensor:
+    from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import \
+        apply_rotary_pos_emb_vision
+    head_dim = self.qkv.in_features // self.num_heads
+    seq_length = hidden_states.shape[0]
+    q, k, v = self.qkv(hidden_states).reshape(
+        seq_length, 3, self.num_heads, -1
+    ).permute(1, 0, 2, 3).unbind(0)
+    if position_embeddings is None:
+        emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
+        cos = emb.cos()
+        sin = emb.sin()
+    else:
+        cos, sin = position_embeddings
+    q, k = apply_rotary_pos_emb_vision(q, k, cos, sin)
 
-    hidden_states = self.layer_norm1(hidden_states)
-
-    hidden_states, attn_weights = self.self_attn(
-        hidden_states=hidden_states,
-        attention_mask=attention_mask,
-        causal_attention_mask=causal_attention_mask,
-        output_attentions=output_attentions,
+    attention_mask = torch.full(
+        [1, seq_length, seq_length], torch.finfo(q.dtype).min, device=q.device, dtype=q.dtype
     )
-    metric = self.self_attn.k_proj.metric
+    for i in range(1, len(cu_seqlens)):
+        attention_mask[..., cu_seqlens[i - 1]: cu_seqlens[i], cu_seqlens[i - 1]: cu_seqlens[i]] = 0
 
-    hidden_states = residual + hidden_states
-
-    r = self.self_attn.k_proj._info['r'].pop(0)
-    if r > 0:
-        self.metric = metric
-    residual = hidden_states
-    hidden_states = self.layer_norm2(hidden_states)
-    hidden_states = self.mlp(hidden_states)
-    hidden_states = residual + hidden_states
-
-    outputs = (hidden_states,)
-
-    if output_attentions:
-        outputs += (attn_weights,)
-
-    return outputs
+    q = q.transpose(0, 1)
+    k = k.transpose(0, 1)
+    v = v.transpose(0, 1)
+    attn_weights = torch.matmul(q, k.transpose(1, 2)) / math.sqrt(head_dim)
+    attn_weights = attn_weights + attention_mask
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(q.dtype)
+    attn_output = torch.matmul(attn_weights, v)
+    attn_output = attn_output.transpose(0, 1)
+    attn_output = attn_output.reshape(seq_length, -1)
+    attn_output = self.proj(attn_output)
+    pruning_paras['attn_logits'] = attn_weights
+    pruning_paras['attn_key'] = k
+    return attn_output
 
 
 @TOKEN_REDUCTION_REGISTRY.register('VisionZip')
@@ -291,8 +287,10 @@ class VisionZip(TokenReductionModule):
 
     def add_sparse_config(self):
         special_config = self.config.get('special', {})
-        self.dominant = special_config.get('dominant', 192)
-        self.contextual = special_config.get('contextual', 30)
+        self.dominant = special_config['dominant']
+        self.contextual = special_config['contextual']
+
+        self.pruning_paras = special_config
 
     def register_reduction_modules(self):
 
@@ -425,27 +423,170 @@ class VisionZip(TokenReductionModule):
         elif self.model.__class__.__name__ == 'Llava':
             vision_tower = self.model.vlm_model.model.vision_tower.vision_tower
 
-        apply_info(
-            vision_tower,
-            dominant_num=self.dominant,
-            contextual_num=self.contextual,
-        )
+        if self.model.__class__.__name__ in ('LlavaHf', 'Llava'):
+            apply_info(
+                vision_tower,
+                dominant_num=self.dominant,
+                contextual_num=self.contextual,
+            )
 
         if self.model.__class__.__name__ == 'LlavaHf':
             self.model.vlm_model.__class__.forward = visionzip_forward
-        elif self.model.__class__.__name__ == 'Llava':
-            from transformers.models.clip.modeling_clip import CLIPEncoderLayer
-            CLIPEncoderLayer.forward = CLIP_EncoderLayer_forward
+        if self.model.__class__.__name__ in ('LlavaHf', 'Llava'):
+            vision_tower.register_forward_pre_hook(
+                update_output_attentions_hook, with_kwargs=True
+            )
 
-        vision_tower.register_forward_pre_hook(
-            update_output_attentions_hook, with_kwargs=True
-        )
+            r = vision_tower.r
+            for idx, block in enumerate(self.blocks):
+                if r[idx]:
+                    block.self_attn.k_proj.num_heads = block.self_attn.num_heads
+                    block.self_attn.k_proj.head_dim = block.self_attn.head_dim
+                    block.self_attn.k_proj.register_forward_hook(store_key_hook)
 
-        r = vision_tower.r
-        for idx, block in enumerate(self.blocks):
-            if r[idx]:
-                block.self_attn.k_proj.num_heads = block.self_attn.num_heads
-                block.self_attn.k_proj.head_dim = block.self_attn.head_dim
-                block.self_attn.k_proj.register_forward_hook(store_key_hook)
+            vision_tower.register_forward_hook(visionzip_hook)
 
-        vision_tower.register_forward_hook(visionzip_hook)
+        def get_metric(fn, pruning_paras):
+            @wraps(fn)
+            def wrapper(self, *args, **kwargs):
+                return fn(self, *args, pruning_paras=pruning_paras, **kwargs)
+            return wrapper
+
+        def merger_hook(module, inputs, kwargs, layer_outs, pruning_paras):
+            with torch.no_grad():
+                attn_mean = pruning_paras['attn_logits'].mean(dim=0)
+                attn_key = pruning_paras['attn_key']
+
+                window_index, _ = module.get_window_index(kwargs['grid_thw'])
+                reverse_indices = torch.argsort(window_index)
+
+                attn_mean = attn_mean.sum(dim=0)
+                attn_mean = attn_mean.view(attn_mean.shape[0] // 4, -1).mean(dim=-1)
+                attn_mean = attn_mean[reverse_indices]
+
+                attn_key = attn_key.view(
+                    attn_key.shape[0], attn_key.shape[1] // 4,
+                    4, attn_key.shape[-1]
+                ).mean(dim=2)
+                attn_key = attn_key[:, reverse_indices, :].mean(dim=0).unsqueeze(0)
+
+                pruning_paras['attn_logits'] = attn_mean
+                pruning_paras['attn_key'] = attn_key
+            return layer_outs
+
+        @prefill_wrapper
+        def get_input_ids_hook(module, input_args, pruning_paras):
+            pruning_paras['input_ids'] = input_args[0]
+            return input_args
+
+        def prune_qwenv25vl_hook(module, args, kwargs, pruning_paras):
+            if kwargs['position_ids'].shape[-1] == 1:
+                return args, kwargs
+            attn_logits = pruning_paras['attn_logits']
+            attn_key = pruning_paras['attn_key']
+            inputs_embeds = kwargs['inputs_embeds']
+            position_ids = kwargs['position_ids']
+            attention_mask = kwargs['attention_mask']
+
+            dominant_num = int(self.dominant * attn_logits.size(0))
+            contextual_num = max(int(self.contextual * attn_logits.size(0)), 1)
+            topk_values, topk_indices = torch.topk(attn_logits, dominant_num)
+
+            mask = torch.zeros_like(attn_logits, dtype=torch.bool)
+            mask[topk_indices] = True
+            contextual_mask = ~mask
+            metric_filtered = attn_key[:, contextual_mask]
+            metric_normalized = metric_filtered / metric_filtered.norm(dim=-1, keepdim=True)
+            del attn_key, metric_filtered
+
+            # Contextual Visual Tokens
+            step = max(1, metric_normalized.shape[1] // contextual_num)
+            target_indices = torch.arange(
+                0, metric_normalized.shape[1], step,
+                device=metric_normalized.device
+            )[:contextual_num]
+            target_tokens = metric_normalized[:, target_indices, :]
+
+            tokens_to_merge = metric_normalized[
+                :,
+                ~torch.isin(
+                    torch.arange(
+                        metric_normalized.shape[1],
+                        device=metric_normalized.device
+                    ), target_indices
+                ),
+                :
+            ]
+            similarity = torch.bmm(tokens_to_merge, target_tokens.transpose(1, 2))
+            assign_one_hot = torch.zeros(
+                tokens_to_merge.shape[0],
+                tokens_to_merge.shape[1],
+                contextual_num,
+                dtype=attn_logits.dtype,
+                device=metric_normalized.device
+            )
+            assign_one_hot.scatter_(2, similarity.argmax(dim=2).unsqueeze(-1), 1)
+            counts = assign_one_hot.sum(dim=1).clamp(min=1).unsqueeze(-1)
+
+            select_mask = torch.zeros_like(attn_logits, dtype=torch.bool)
+            select_mask[topk_indices] = True
+
+            false_pos = (~select_mask).nonzero(as_tuple=True)[0]
+
+            select_mask[false_pos[target_indices]] = True
+
+            img_mask = (pruning_paras['input_ids'] == pruning_paras['vision_token_index'])[0]
+            st_idx = torch.nonzero(img_mask, as_tuple=True)[0]
+
+            if st_idx.numel() > 0:
+                first, last = st_idx[0].item(), st_idx[-1].item()
+                img_mask[first: last + 1] = ~select_mask
+                img_mask = ~img_mask
+                contexual_input_idx = false_pos[target_indices] + first
+
+            hidden_states_filtered = inputs_embeds[:, first: last + 1][:, contextual_mask]
+            hidden_to_merge = hidden_states_filtered[
+                :,
+                ~torch.isin(
+                    torch.arange(
+                        hidden_states_filtered.shape[1],
+                        device=hidden_states_filtered.device
+                    ), target_indices
+                ),
+                :
+            ]
+            aggregated_hidden = torch.bmm(assign_one_hot.transpose(1, 2), hidden_to_merge) / counts
+            target_hidden = hidden_states_filtered[:, target_indices, :]
+
+            contextual_tokens = target_hidden + aggregated_hidden
+
+            kwargs['position_ids'] = position_ids[:, :, img_mask]
+            kwargs['attention_mask'] = attention_mask[:, img_mask]
+            inputs_embeds[:, contexual_input_idx] = contextual_tokens
+            kwargs['inputs_embeds'] = inputs_embeds[:, img_mask]
+            del contextual_tokens, hidden_states_filtered, hidden_to_merge, aggregated_hidden
+            torch.cuda.empty_cache()
+            return args, kwargs
+
+        if self.model.__class__.__name__ == 'Qwen2_5VL':
+            self.blocks[-1].attn.forward = MethodType(
+                get_metric(Qwen2_5_VLVisionAttention_forward, self.pruning_paras),
+                self.blocks[-1].attn
+            )
+            self.model.vision_model.register_forward_hook(
+                functools.partial(
+                    merger_hook,
+                    pruning_paras=self.pruning_paras,
+                ),
+                with_kwargs=True
+            )
+            self.model.embed_tokens.register_forward_pre_hook(
+                functools.partial(get_input_ids_hook, pruning_paras=self.pruning_paras)
+            )
+            self.model.language_model.register_forward_pre_hook(
+                functools.partial(
+                    prune_qwenv25vl_hook,
+                    pruning_paras=self.pruning_paras,
+                ),
+                with_kwargs=True
+            )

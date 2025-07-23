@@ -1,7 +1,5 @@
 import functools
 import math
-from functools import wraps
-from types import MethodType
 
 import torch
 
@@ -19,95 +17,43 @@ class DART(TokenReductionModule):
         self.register_reduction_modules()
 
     def add_sparse_config(self):
-
         self.pruning_loc = self.special_config['pruning_loc']
-        self.special_config['image_token_length'] = \
-            self.model.pruning_config['image_token_length']
-        self.special_config['IMAGE_TOKEN_INDEX'] = \
-            self.model.pruning_config['IMAGE_TOKEN_INDEX']
 
         self.pruning_paras = self.special_config
 
     def register_reduction_modules(self):
 
-        def input_hook_llava(fn, pruning_paras):
-            @wraps(fn)
-            def wrapper(self, *args, **kwargs):
-                if len(args) == 0:
-                    return fn(*args, **kwargs)
-                input_args = args[0]
-                if hasattr(input_args[0], 'shape') and input_args[0].shape[0] == 1:
-                    return fn(*args, **kwargs)
+        @prefill_wrapper
+        def vtoken_length_hook(module, input_args, pruning_paras):
 
-                input_ids = args[0]
-                attention_mask = args[2]
-                token_indices = (
-                    input_ids[0][attention_mask[0]] == pruning_paras['IMAGE_TOKEN_INDEX']
-                )
-                pruning_paras['image_token_start_index'] = torch.where(token_indices)[0][0].item()
+            input_ids = input_args[0]
+            token_indices = torch.where(
+                input_ids[0] == pruning_paras['vision_token_index']
+            )[0]
+            pruning_paras['vision_token_length'] = token_indices.shape[0]
 
-                outputs = fn(*args, **kwargs)
-                return outputs
-            return wrapper
+            return input_args
 
-        def get_seq_len_hook(module, args, kwargs, pruning_paras):
-            if kwargs['input_ids'] is not None:
-                pruning_paras['seq_len'] = kwargs['input_ids'].shape[1]
-            elif kwargs['inputs_embeds'] is not None:
-                pruning_paras['seq_len'] = kwargs['inputs_embeds'].shape[1]
-            else:
-                raise ValueError('You have to specify either input_ids or inputs_embeds')
-
+        @prefill_wrapper
         def get_any_states_hook(module, args, kwargs, layer_outs, pruning_paras, layer_idx):
-            from transformers.models.llama.modeling_llama import (
-                apply_rotary_pos_emb, repeat_kv)
-            if len(kwargs['position_ids'][0]) == 1:
-                return layer_outs
 
-            hidden_states = kwargs['hidden_states']
-            position_embeddings = kwargs['position_embeddings']
-            position_ids = kwargs['position_ids']
-            past_key_value = layer_outs[2]
-
-            bsz, q_len, _ = hidden_states.size()
-            query_states = module.q_proj(hidden_states)
-            key_states = module.k_proj(hidden_states)
-            value_states = module.v_proj(hidden_states)
-            query_states = query_states.view(
-                bsz, q_len, module.num_heads, module.head_dim
-            ).transpose(1, 2)
-            key_states = key_states.view(
-                bsz, q_len, module.num_key_value_heads, module.head_dim
-            ).transpose(1, 2)
-            value_states = value_states.view(
-                bsz, q_len, module.num_key_value_heads, module.head_dim
-            ).transpose(1, 2)
-
-            if position_embeddings is None:
-                cos, sin = module.rotary_emb(value_states, position_ids)
-            else:
-                cos, sin = position_embeddings
-            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-            if past_key_value is not None:
-                key_states = past_key_value.key_cache[layer_idx]
-                value_states = past_key_value.value_cache[layer_idx]
-            key_states = repeat_kv(key_states, module.num_key_value_groups)
-            value_states = repeat_kv(value_states, module.num_key_value_groups)
-
-            pruning_paras['any_states'] = (query_states, key_states, value_states)
+            past_key_value = kwargs['past_key_value']
+            if past_key_value is None:
+                raise ValueError('DART needs past_key_value but got None.')
+            pruning_paras['any_states'] = past_key_value.key_cache[layer_idx]
 
             return layer_outs
 
         @prefill_wrapper
         def pruning_hook(module, args, kwargs, pruning_paras, normlayer):
 
-            image_token_start_index = pruning_paras['image_token_start_index']
-            image_token_length = pruning_paras['image_token_length']
-            any_states = pruning_paras['any_states'][-2]
-            seq_length = pruning_paras['seq_len']
+            image_token_start_index = pruning_paras['vision_token_start_index']
+            image_token_length = pruning_paras['vision_token_length']
+            any_states = pruning_paras['any_states']
 
             hidden_states = args[0]
             attention_mask = kwargs['attention_mask']
+            seq_length = hidden_states.shape[1]
             device = hidden_states.device
             last_layer_state = normlayer(hidden_states)
 
@@ -140,27 +86,20 @@ class DART(TokenReductionModule):
             kwargs['position_ids'].resize_as_(position_ids).copy_(position_ids.clone())
 
             position_embeddings = kwargs['position_embeddings']
-            new_pe0 = position_embeddings[0][:, keep_indexs, :].clone()
-            new_pe1 = position_embeddings[1][:, keep_indexs, :].clone()
+            index_dim = 1 if position_embeddings[0].dim() == 3 else 2
+            new_pe0 = position_embeddings[0].index_select(index_dim, keep_indexs).clone()
+            new_pe1 = position_embeddings[1].index_select(index_dim, keep_indexs).clone()
             position_embeddings[0].resize_as_(new_pe0).copy_(new_pe0)
             position_embeddings[1].resize_as_(new_pe0).copy_(new_pe1)
 
             return (hidden_states,), kwargs
 
-        hook_fn = input_hook_llava(
-            self.model.vlm_model.prepare_inputs_labels_for_multimodal,
-            self.pruning_paras
-        )
-        self.model.vlm_model.prepare_inputs_labels_for_multimodal = MethodType(
-            hook_fn, self.model.vlm_model
-        )
+        if self.special_config['vision_token_length'] is None:
+            self.model.embed_tokens.register_forward_pre_hook(
+                functools.partial(vtoken_length_hook, pruning_paras=self.pruning_paras)
+            )
 
-        self.model.model.model.register_forward_pre_hook(
-            functools.partial(get_seq_len_hook, pruning_paras=self.pruning_paras),
-            with_kwargs=True
-        )
-
-        self.blocks[self.pruning_loc - 1].self_attn.register_forward_hook(
+        self.blocks[self.pruning_loc - 1].register_forward_hook(
             functools.partial(
                 get_any_states_hook,
                 pruning_paras=self.pruning_paras,
@@ -173,24 +112,21 @@ class DART(TokenReductionModule):
             functools.partial(
                 pruning_hook,
                 pruning_paras=self.pruning_paras,
-                normlayer=self.model.model.model.norm
+                normlayer=self.model.language_model.norm
             ),
             with_kwargs=True
         )
 
 
 def get_retained_image_token(pruning_paras, last_layer_state, any_states):
-    image_token_start_index = pruning_paras['image_token_start_index']
-    image_token_length = pruning_paras['image_token_length']
-    MAX_NUM_TRUNCTION = pruning_paras['max_num_trunction']
+    image_token_start_index = pruning_paras['vision_token_start_index']
+    image_token_length = pruning_paras['vision_token_length']
     pivot_image_token = pruning_paras['pivot_image_token']
     pivot_text_token = pruning_paras['pivot_text_token']
     reduction_ratio = pruning_paras['reduction_ratio']
-    TOKEN_TOPK = math.ceil(
-        (
-            MAX_NUM_TRUNCTION if MAX_NUM_TRUNCTION is not None
-            else (image_token_length * (1 - reduction_ratio))
-        ) // (pivot_image_token + pivot_text_token))
+    TOKEN_TOPK = int(
+        image_token_length * (1 - reduction_ratio) / (pivot_image_token + pivot_text_token)
+    )
     device = last_layer_state.device
 
     any_states = any_states.permute(0, 2, 1, 3)

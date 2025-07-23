@@ -17,7 +17,7 @@ sparse:
     special:
         method: FastV
         pruning_loc: 3
-        rate: 0.778
+        rate: 0.778  # prune_rate
 save:
     save_trans: False
     save_fake: False

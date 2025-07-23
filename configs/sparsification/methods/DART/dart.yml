@@ -16,9 +16,8 @@ sparse:
     method: TokenReduction
     special:
         method: DART
-        pruning_loc: 2
+        pruning_loc: 5
         reduction_ratio: 0.778
-        max_num_trunction: 128
         pivot_image_token: 4
         pivot_text_token : 4
 save:

@@ -23,12 +23,15 @@ class TokenReductionModule:
                 'video_token_length'
             ]
         else:
-            self.special_config['vision_token_index'] = self.model.pruning_config[
-                'image_token_index'
-            ]
-            self.special_config['vision_token_length'] = self.model.pruning_config[
-                'image_token_length'
-            ]
+            self.special_config['vision_token_index'] = self.model.pruning_config.get(
+                'image_token_index', None
+            )
+            self.special_config['vision_token_start_index'] = self.model.pruning_config.get(
+                'vision_token_start_index', None
+            )
+            self.special_config['vision_token_length'] = self.model.pruning_config.get(
+                'image_token_length', None
+            )
 
     def register_reduction_modules(self):
         pass

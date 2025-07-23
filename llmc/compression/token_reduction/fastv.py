@@ -1,6 +1,4 @@
 import functools
-from functools import wraps
-from types import MethodType
 
 import torch
 
@@ -18,46 +16,22 @@ class FastV(TokenReductionModule):
         self.register_reduction_modules()
 
     def add_sparse_config(self):
-
         self.pruning_loc = self.special_config['pruning_loc']
-        self.special_config['image_token_length'] = \
-            self.model.pruning_config['image_token_length']
-        self.special_config['IMAGE_TOKEN_INDEX'] = \
-            self.model.pruning_config['IMAGE_TOKEN_INDEX']
-        self.special_config['attn_scores'] = None
 
         self.pruning_paras = self.special_config
 
     def register_reduction_modules(self):
 
         @prefill_wrapper
-        def input_hook(module, input_args, pruning_paras):
+        def vtoken_length_hook(module, input_args, pruning_paras):
             input_ids = input_args[0]
-            image_token_idxs = (input_ids[0] ==
-                                pruning_paras['vision_token_index']).nonzero(as_tuple=True)[0]
-            pruning_paras['image_token_start_index'] = image_token_idxs[0].item()
-
+            token_indices = torch.where(
+                input_ids[0] == pruning_paras['vision_token_index']
+            )[0]
+            pruning_paras['vision_token_length'] = token_indices.shape[0]
             return input_args
 
-        def input_hook_llava(fn, pruning_paras):
-            @wraps(fn)
-            def wrapper(self, *args, **kwargs):
-                if len(args) == 0:
-                    return fn(*args, **kwargs)
-                input_args = args[0]
-                if hasattr(input_args[0], 'shape') and input_args[0].shape[0] == 1:
-                    return fn(*args, **kwargs)
-
-                input_ids = args[0]
-                attention_mask = args[2]
-                token_indices = \
-                    input_ids[0][attention_mask[0]] == pruning_paras['IMAGE_TOKEN_INDEX']
-                pruning_paras['image_token_start_index'] = torch.where(token_indices)[0][0].item()
-
-                outputs = fn(*args, **kwargs)
-                return outputs
-            return wrapper
-
+        @prefill_wrapper
         def update_output_attentions_hook(module, args, kwargs, pruning_paras):
             kwargs['output_attentions'] = True
             pruning_paras['attn_scores'] = module.__class__.forward(module, *args, **kwargs)[1]
@@ -68,8 +42,8 @@ class FastV(TokenReductionModule):
         def fastv_pruning_hook(module, args, kwargs, pruning_paras):
 
             rate = pruning_paras['rate']
-            image_token_start_index = pruning_paras['image_token_start_index']
-            image_token_length = pruning_paras['image_token_length']
+            image_token_start_index = pruning_paras['vision_token_start_index']
+            image_token_length = pruning_paras['vision_token_length']
 
             hidden_states = args[0]
             causal_mask = kwargs['attention_mask']
@@ -121,24 +95,17 @@ class FastV(TokenReductionModule):
             kwargs['position_ids'].resize_as_(position_ids).copy_(position_ids.clone())
 
             position_embeddings = kwargs['position_embeddings']
-            new_pe0 = position_embeddings[0][:, keep_indexs, :].clone()
-            new_pe1 = position_embeddings[1][:, keep_indexs, :].clone()
+            index_dim = 1 if position_embeddings[0].dim() == 3 else 2
+            new_pe0 = position_embeddings[0].index_select(index_dim, keep_indexs).clone()
+            new_pe1 = position_embeddings[1].index_select(index_dim, keep_indexs).clone()
             position_embeddings[0].resize_as_(new_pe0).copy_(new_pe0)
             position_embeddings[1].resize_as_(new_pe0).copy_(new_pe1)
 
             return (hidden_states,), kwargs
 
-        if self.model.__class__.__name__ == 'LlavaHf':
+        if self.special_config['vision_token_length'] is None:
             self.model.embed_tokens.register_forward_pre_hook(
-                functools.partial(input_hook, pruning_paras=self.pruning_paras)
-            )
-        elif self.model.__class__.__name__ == 'Llava':
-            hook_fn = input_hook_llava(
-                self.model.vlm_model.prepare_inputs_labels_for_multimodal,
-                self.pruning_paras
-            )
-            self.model.vlm_model.prepare_inputs_labels_for_multimodal = MethodType(
-                hook_fn, self.model.vlm_model
+                functools.partial(vtoken_length_hook, pruning_paras=self.pruning_paras)
             )
 
         self.blocks[self.pruning_loc - 1].register_forward_pre_hook(

@@ -62,6 +62,7 @@ class Llava(Llama):
         self.mm_model = self.vlm_model
         logger.info(f'self.vlm_model : {self.vlm_model}')
         self.vision_model = self.vlm_model.get_vision_tower()
+        self.language_model = self.vlm_model.model
         self.vision_projector = self.vlm_model.model.mm_projector
         # Llava merges the language model with the vision projector and vision model
         self.model = self.vlm_model
@@ -71,8 +72,9 @@ class Llava(Llama):
             'image_token_length': self.vlm_model_config.image_seq_length,
             'select_layer': self.vlm_model_config.vision_feature_layer,
             'select_feature': self.vlm_model_config.vision_feature_select_strategy,
-            'image_token_index': self.vlm_model_config.image_token_index,
+            'image_token_index': IMAGE_TOKEN_INDEX,
             'IMAGE_TOKEN_INDEX': IMAGE_TOKEN_INDEX,  # for llava
+            'vision_token_start_index': 35,
         }
         self.processor = None
         self.first_turn_question = True

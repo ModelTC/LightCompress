@@ -16,7 +16,7 @@ sparse:
     vision:
         method: TokenReduction
         special:
-            method: VisionZip
+            method: VisionZip   # retain
             dominant: 191       # visual_tokens = dominan_tokens + 1(cls_token)
             contextual: 30
 save:
