@@ -454,7 +454,7 @@ class VisionZip(TokenReductionModule):
 
         def merger_hook(module, inputs, kwargs, layer_outs, pruning_paras):
             with torch.no_grad():
-                attn_mean = pruning_paras['attn_logits'].mean(dim=0)
+                attn_mean = pruning_paras['attn_logits'].mean(dim=0)  # 16 1120, 1120 -> 1120, 1120
                 attn_key = pruning_paras['attn_key']
 
                 window_index, _ = module.get_window_index(kwargs['grid_thw'])
@@ -539,10 +539,21 @@ class VisionZip(TokenReductionModule):
             st_idx = torch.nonzero(img_mask, as_tuple=True)[0]
 
             if st_idx.numel() > 0:
-                first, last = st_idx[0].item(), st_idx[-1].item()
-                img_mask[first: last + 1] = ~select_mask
+                discontinuities = torch.where(st_idx[1:] - st_idx[:-1] != 1)[0]
+                if discontinuities.numel() > 0:
+                    raise ValueError('Visual tokens are not contiguous in input_ids!')
+                    segment_starts = [st_idx[0].item()] + [st_idx[i + 1].item() for i in discontinuities.tolist()]  # noqa
+                    segment_ends = [st_idx[i].item() for i in discontinuities.tolist()] + [st_idx[-1].item()]  # noqa
+                    offset = 0
+                    for first, last in zip(segment_starts, segment_ends):
+                        length = last - first + 1
+                        # [15 1502] [1505 3289]
+                        img_mask[first: last + 1] = ~select_mask[offset: offset + length]
+                else:
+                    first, last = st_idx[0].item(), st_idx[-1].item()
+                    img_mask[first: last + 1] = ~select_mask
                 img_mask = ~img_mask
-                contexual_input_idx = false_pos[target_indices] + first
+                contextual_input_idx = false_pos[target_indices] + first
 
             hidden_states_filtered = inputs_embeds[:, first: last + 1][:, contextual_mask]
             hidden_to_merge = hidden_states_filtered[
@@ -562,7 +573,7 @@ class VisionZip(TokenReductionModule):
 
             kwargs['position_ids'] = position_ids[:, :, img_mask]
             kwargs['attention_mask'] = attention_mask[:, img_mask]
-            inputs_embeds[:, contexual_input_idx] = contextual_tokens
+            inputs_embeds[:, contextual_input_idx] = contextual_tokens
             kwargs['inputs_embeds'] = inputs_embeds[:, img_mask]
             del contextual_tokens, hidden_states_filtered, hidden_to_merge, aggregated_hidden
             torch.cuda.empty_cache()

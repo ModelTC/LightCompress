@@ -89,6 +89,10 @@ class VQAEval:
         datetime_str: str = get_datetime_str(),
         cli_args=None,
     ):
+        import argparse
+        cli_args = argparse.Namespace(
+            process_with_media=True,
+        )
 
         model = llmc_model.eval_name
         model_args = 'pretrained=' + self.model_path + ',device_map=auto'

@@ -62,8 +62,6 @@ class Qwen2_5VL(Qwen2VL):
 
         self.min_pixels = 256 * 28 * 28
         self.max_pixels = 1280 * 28 * 28
-        logger.warning(f'min_pixels is set to: {self.min_pixels}')
-        logger.warning(f'max_pixels is set to: {self.max_pixels}')
         self.processor = AutoProcessor.from_pretrained(
             self.model_path,
             min_pixels=self.min_pixels,
@@ -76,6 +74,7 @@ class Qwen2_5VL(Qwen2VL):
             'vision_start_token_id': self.vlm_model_config.vision_start_token_id,
             'vision_token_start_index': 15
         }
+        self.first_turn_question = True
 
     # todo: check
     def get_subsets_in_block(self, block):

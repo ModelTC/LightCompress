@@ -1,7 +1,12 @@
+import os
+
+import cv2
 import numpy as np
 import torch
+import torchvision.transforms.functional as TF
 from loguru import logger
 from PIL import Image, ImageDraw
+from torchvision.transforms import ToPILImage
 
 try:
     import matplotlib.pyplot as plt
@@ -12,16 +17,30 @@ except Exception:
     )
 
 
-def save_image(imgae_tensor, mean, std, save_path):
-    img = imgae_tensor.cpu().numpy().transpose(1, 2, 0)  # (C, H, W) -> (H, W, C)
+def to_pil_image(
+    image_tensor,
+    mean=[0.48145466, 0.4578275, 0.40821073],
+    std=[0.26862954, 0.26130258, 0.27577711]
+):
+    img = image_tensor.cpu().numpy().transpose(1, 2, 0)  # (C, H, W) -> (H, W, C)
     img = img * std + mean
     img = np.clip(img * 255, 0, 255).astype(np.uint8)
+    return Image.fromarray(img)
+
+
+def save_image(image_tensor, mean, std, save_path):
+    img = to_pil_image(image_tensor)
     Image.fromarray(img).save(save_path)
 
 
 def visualize_kept_patches(
-    image, keep_idx, mean, std,
-    patch_size=14, save_path=None, darken_ratio=0.3
+    image,
+    keep_idx,
+    mean=[0.48145466, 0.4578275, 0.40821073],
+    std=[0.26862954, 0.26130258, 0.27577711],
+    patch_size=14,
+    darken_ratio=0.3,
+    save_path=None,
 ):
     assert image.ndim == 3 and image.shape[0] == 3, \
         f'Expected image of shape [3, H, W], got {image.shape}'
@@ -46,7 +65,7 @@ def visualize_kept_patches(
     save_image(masked_image, mean, std, save_path)
 
 
-def grid_show(to_shows, cols):
+def grid_show(to_shows, cols, save_path=None, dpi=100):
     rows = (len(to_shows) - 1) // cols + 1
     it = iter(to_shows)
     fig, axs = plt.subplots(rows, cols, figsize=(rows * 8.5, cols * 2))
@@ -61,8 +80,10 @@ def grid_show(to_shows, cols):
             axs[i, j].set_title(title)
             axs[i, j].set_yticks([])
             axs[i, j].set_xticks([])
-    plt.show()
-
+    if save_path:
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, bbox_inches='tight', dpi=dpi)
+    plt.close()
 
 # def visualize_head(att_map):
 #     ax = plt.gca()
@@ -73,14 +94,14 @@ def grid_show(to_shows, cols):
 #     plt.show()
 
 
-def visualize_heads(att_map, cols):
+def visualize_heads(att_map, cols, save_path):
     to_shows = []
-    att_map = att_map.squeeze()
+    att_map = att_map.squeeze().detach().cpu().numpy()
     for i in range(att_map.shape[0]):
         to_shows.append((att_map[i], f'Head {i}'))
     average_att_map = att_map.mean(axis=0)
     to_shows.append((average_att_map, 'Head Average'))
-    grid_show(to_shows, cols=cols)
+    grid_show(to_shows, cols=cols, save_path=save_path)
 
 
 def gray2rgb(image):
@@ -128,7 +149,14 @@ def cls_padding(image, mask, cls_weight, grid_size):
     return padded_image, padded_mask, meta_mask
 
 
-def visualize_grid_to_grid_with_cls(att_map, grid_index, image, grid_size=14, alpha=0.6):
+def visualize_grid_to_grid_with_cls(
+    att_map,
+    grid_index,
+    image,
+    grid_size=14,
+    alpha=0.6,
+    save_path=None
+):
     if not isinstance(grid_size, tuple):
         grid_size = (grid_size, grid_size)
 
@@ -156,17 +184,20 @@ def visualize_grid_to_grid_with_cls(att_map, grid_index, image, grid_size=14, al
     ax[1].imshow(meta_mask)
     ax[1].axis('off')
 
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    plt.savefig(save_path, bbox_inches='tight', dpi=150)
+    plt.close()
 
-def visualize_grid_to_grid(att_map, grid_index, image, grid_size=14, alpha=0.6):
+
+def visualize_grid_to_grid(att_map, grid_index, image, grid_size=14, alpha=0.6, save_path=None):
     if not isinstance(grid_size, tuple):
         grid_size = (grid_size, grid_size)
 
-    H, W = att_map.shape
-    # with_cls_token = False
-
+    image = to_pil_image(image)
     grid_image = highlight_grid(image, [grid_index], grid_size)
 
     mask = att_map[grid_index].reshape(grid_size[0], grid_size[1])
+    mask = mask.cpu().numpy().astype(np.float32)
     mask = Image.fromarray(mask).resize((image.size))
 
     fig, ax = plt.subplots(1, 2, figsize=(10, 7))
@@ -178,7 +209,10 @@ def visualize_grid_to_grid(att_map, grid_index, image, grid_size=14, alpha=0.6):
     ax[1].imshow(grid_image)
     ax[1].imshow(mask / np.max(mask), alpha=alpha, cmap='rainbow')
     ax[1].axis('off')
-    plt.show()
+
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    plt.savefig(save_path, bbox_inches='tight', dpi=150)
+    plt.close()
 
 
 def highlight_grid(image, grid_indexes, grid_size=14):

@@ -39,15 +39,10 @@ class Llava(Llama):
         pass
 
     def build_model(self):
-        self.llava_config = LlavaConfig.from_pretrained(
-            self.model_path, trust_remote_code=True
-        )
+
         self.vlm_model_config = AutoConfig.from_pretrained(
             self.model_path, trust_remote_code=True
         )
-        # llava need: use_cache
-        self.llava_config.use_cache = True
-        self.vlm_model_config.use_cache = True
         logger.info(f'self.vlm_model_config : {self.vlm_model_config}')
 
         self.tokenizer, self.vlm_model, self.image_processor, context_len = load_pretrained_model(
@@ -70,8 +65,8 @@ class Llava(Llama):
         self.pruning_config = {
             'is_video_model': False,
             'image_token_length': self.vlm_model_config.image_seq_length,
-            'select_layer': self.vlm_model_config.vision_feature_layer,
-            'select_feature': self.vlm_model_config.vision_feature_select_strategy,
+            'select_layer': self.vision_model.select_layer,
+            'select_feature': self.vision_model.select_feature,
             'image_token_index': IMAGE_TOKEN_INDEX,
             'IMAGE_TOKEN_INDEX': IMAGE_TOKEN_INDEX,  # for llava
             'vision_token_start_index': 35,
