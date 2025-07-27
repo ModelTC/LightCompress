@@ -1,7 +1,5 @@
-import time
 
-import torch
-from loguru import logger
+from functools import wraps
 
 
 class TokenReductionModule:
@@ -35,3 +33,20 @@ class TokenReductionModule:
 
     def register_reduction_modules(self):
         pass
+
+    def vtoken_length_for_llava_hook(self, fn, pruning_paras):
+        @wraps(fn)
+        def wrapper(self, *args, **kwargs):
+            if args[0].shape[1] == 1:
+                return fn(*args, **kwargs)
+
+            message = (
+                'To obtain the vision_token_length for LLaVA-1.6, you should append '
+                '`image_features.shape[1]` to the return value of the function '
+                '`prepare_inputs_labels_for_multimodal`, and modify the related code accordingly.'
+            )
+            outs = fn(*args, **kwargs)
+            assert len(outs) == 7, message
+            pruning_paras['vision_token_length'] = outs[-1]
+            return outs
+        return wrapper

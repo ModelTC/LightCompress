@@ -1,5 +1,5 @@
 import functools
-import math
+from types import MethodType
 
 import torch
 
@@ -24,25 +24,19 @@ class DART(TokenReductionModule):
     def register_reduction_modules(self):
 
         @prefill_wrapper
-        def vtoken_length_hook(module, input_args, pruning_paras):
-
-            input_ids = input_args[0]
+        def vtoken_length_hook(module, args, pruning_paras):
+            input_ids = args[0]
             token_indices = torch.where(
                 input_ids[0] == pruning_paras['vision_token_index']
             )[0]
             pruning_paras['vision_token_length'] = token_indices.shape[0]
 
-            return input_args
-
         @prefill_wrapper
         def get_any_states_hook(module, args, kwargs, layer_outs, pruning_paras, layer_idx):
-
             past_key_value = kwargs['past_key_value']
             if past_key_value is None:
                 raise ValueError('DART needs past_key_value but got None.')
             pruning_paras['any_states'] = past_key_value.key_cache[layer_idx]
-
-            return layer_outs
 
         @prefill_wrapper
         def pruning_hook(module, args, kwargs, pruning_paras, normlayer):
@@ -95,9 +89,17 @@ class DART(TokenReductionModule):
             return (hidden_states,), kwargs
 
         if self.special_config['vision_token_length'] is None:
-            self.model.embed_tokens.register_forward_pre_hook(
-                functools.partial(vtoken_length_hook, pruning_paras=self.pruning_paras)
-            )
+            if self.model.__class__.__name__ == 'Llava':
+                self.model.vlm_model.prepare_inputs_labels_for_multimodal = MethodType(
+                    self.vtoken_length_for_llava_hook(
+                        self.model.vlm_model.prepare_inputs_labels_for_multimodal,
+                        self.pruning_paras
+                    ), self.model.vlm_model
+                )
+            else:
+                self.model.embed_tokens.register_forward_pre_hook(
+                    functools.partial(vtoken_length_hook, pruning_paras=self.pruning_paras)
+                )
 
         self.blocks[self.pruning_loc - 1].register_forward_hook(
             functools.partial(

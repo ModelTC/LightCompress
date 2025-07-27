@@ -44,11 +44,11 @@ class Llava(Llama):
             self.model_path, trust_remote_code=True
         )
         logger.info(f'self.vlm_model_config : {self.vlm_model_config}')
-
+        model_name = get_model_name_from_path(self.model_path)
         self.tokenizer, self.vlm_model, self.image_processor, context_len = load_pretrained_model(
             self.model_path,
             None,
-            get_model_name_from_path(self.model_path),
+            model_name,
             device_map='cpu',
             attn_implementation='sdpa'
         )
@@ -71,6 +71,8 @@ class Llava(Llama):
             'IMAGE_TOKEN_INDEX': IMAGE_TOKEN_INDEX,  # for llava
             'vision_token_start_index': 35,
         }
+        if 'v1.6' in model_name.lower():
+            self.pruning_config['image_token_length'] = None
         self.processor = None
         self.first_turn_question = True
 

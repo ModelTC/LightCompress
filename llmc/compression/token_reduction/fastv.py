@@ -1,4 +1,5 @@
 import functools
+from types import MethodType
 
 import torch
 
@@ -104,9 +105,17 @@ class FastV(TokenReductionModule):
             return (hidden_states,), kwargs
 
         if self.special_config['vision_token_length'] is None:
-            self.model.embed_tokens.register_forward_pre_hook(
-                functools.partial(vtoken_length_hook, pruning_paras=self.pruning_paras)
-            )
+            if self.model.__class__.__name__ == 'Llava':
+                self.model.vlm_model.prepare_inputs_labels_for_multimodal = MethodType(
+                    self.vtoken_length_for_llava_hook(
+                        self.model.vlm_model.prepare_inputs_labels_for_multimodal,
+                        self.pruning_paras
+                    ), self.model.vlm_model
+                )
+            else:
+                self.model.embed_tokens.register_forward_pre_hook(
+                    functools.partial(vtoken_length_hook, pruning_paras=self.pruning_paras)
+                )
 
         self.blocks[self.pruning_loc - 1].register_forward_pre_hook(
             functools.partial(update_output_attentions_hook, pruning_paras=self.pruning_paras),

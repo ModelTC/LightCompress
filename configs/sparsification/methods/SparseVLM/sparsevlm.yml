@@ -17,8 +17,7 @@ sparse:
     special:
         method: SparseVLM
         pruning_loc: [2, 6, 15]
-        retained_tokens: 192
-        prune_flag: True
+        reduction_ratio: 0.6667
         merge_flag: True
 save:
     save_trans: False
