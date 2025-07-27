@@ -42,7 +42,7 @@ class TokenReductionModule:
 
             message = (
                 'To obtain the vision_token_length for LLaVA-1.6, you should append '
-                '`image_features.shape[1]` to the return value of the function '
+                '`image_features[0].shape[0]` to the return value of the function '
                 '`prepare_inputs_labels_for_multimodal`, and modify the related code accordingly.'
             )
             outs = fn(*args, **kwargs)
