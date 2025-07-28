@@ -1,10 +1,16 @@
 import functools
+import math
+from types import MethodType
+from typing import Callable, Tuple
 
 import torch
+import torch.nn.functional as F
+from einops import rearrange
 
 from llmc.utils.registry_factory import TOKEN_REDUCTION_REGISTRY
 
 from .token_reduction_module import TokenReductionModule
+from .utils import prepare_inputs_labels_for_multimodal_with_index_masks
 
 
 @TOKEN_REDUCTION_REGISTRY.register('MustDrop')
@@ -15,17 +21,10 @@ class MustDrop(TokenReductionModule):
         self.register_reduction_modules()
 
     def add_sparse_config(self):
-        self.pruning_loc = self.special_config['pruning_loc']
+        self.pruning_loc = self.model.pruning_config.get('select_layer', -1)
         self.pruning_paras = self.special_config
 
     def register_reduction_modules(self):
-
-        import math
-        from typing import Callable, Tuple
-
-        import numpy as np
-        import torch.nn.functional as F
-        from einops import rearrange
 
         def conditional_pooling(
             feat: torch.Tensor,
@@ -170,7 +169,14 @@ class MustDrop(TokenReductionModule):
                 )
                 x = torch.cat([dst, unm], dim=1)
                 x = torch.cat((x_cls, x), dim=1)
-                return x
+
+                index_masks = torch.zeros((n, t1), dtype=torch.bool, device=x_feat.device)
+                dst_flat = dst_idx.view(n, -1)
+                unm_flat = unm_idx.view(n, -1)
+                index_masks.scatter_(1, dst_flat, True)
+                index_masks.scatter_(1, unm_flat, True)
+
+                return x, index_masks
 
             return merge
 
@@ -181,26 +187,49 @@ class MustDrop(TokenReductionModule):
             if size is None:
                 size = torch.ones_like(x[..., 0, None])
 
-            x = merge(x * size, mode='sum')
-            size = merge(size, mode='sum')
+            x, index_masks = merge(x * size, mode='sum')
+            size, _ = merge(size, mode='sum')
             x = x / size
 
-            return x, size
+            return x, size, index_masks
 
-        def spatial_merge_hook(module, args, kwargs, layer_outs, pruning_paras):
+        def spatial_merge_hook(module, inps, outs, pruning_paras, llava_next):
             spatial_threshold = pruning_paras['spatial_threshold']
             window_size = pruning_paras['window_size']
-            hidden_states = layer_outs[0]
+            hidden_states = outs[0]
+            vtoken_length = hidden_states.shape[1]
             fix_r = 0
             if pruning_paras.get('retained_tokens', None) is not None:
                 retained_tokens = pruning_paras['retained_tokens']
-                fix_r = (pruning_paras['vision_token_length'] - retained_tokens) \
+                fix_r = (vtoken_length - retained_tokens) \
                     // (window_size[0] * window_size[1] - 1)
             merge = conditional_pooling(hidden_states, spatial_threshold, window_size, fix_r)
-            hidden_states, size = merge_wavg(merge, hidden_states, None)
-            return (hidden_states,)
+            hidden_states, size, index_masks = merge_wavg(merge, hidden_states, None)
 
-        self.blocks[self.pruning_loc - 1].register_forward_hook(
-            functools.partial(spatial_merge_hook, pruning_paras=self.pruning_paras),
-            with_kwargs=True,
+            if not llava_next:
+                return (hidden_states,)
+
+            pruning_paras['index_masks'] = index_masks
+            return outs
+
+        def update_index_masks_hook(module, inps, outs, pruning_paras):
+            module.index_masks = pruning_paras['index_masks']
+
+        self.blocks[self.pruning_loc].register_forward_hook(
+            functools.partial(
+                spatial_merge_hook,
+                pruning_paras=self.pruning_paras,
+                llava_next=self.special_config['vision_token_length'] is None
+            ),
         )
+
+        if self.special_config['vision_token_length'] is None:
+
+            self.model.vlm_model.prepare_inputs_labels_for_multimodal = MethodType(
+                prepare_inputs_labels_for_multimodal_with_index_masks,
+                self.model.vlm_model
+            )
+
+            self.model.vision_model.register_forward_hook(
+                functools.partial(update_index_masks_hook, pruning_paras=self.pruning_paras),
+            )

@@ -1,0 +1,25 @@
+base:
+    seed: &seed 42
+model:
+    type: Llava
+    path: model path
+    torch_dtype: auto
+eval:
+    eval_pos: [pretrain, transformed]
+    type: vqa
+    name: [mme]
+    download: False
+    path: MME dataset path
+    bs: 1
+sparse:
+    vision:
+        method: TokenReduction
+        special:
+            method: MustDrop
+            spatial_threshold: 0.6
+            window_size: [3, 3]
+            retained_tokens: 128  # llava_next: 128, 64, 32 llava: 192, 128, 64
+save:
+    save_trans: False
+    save_fake: False
+    save_path: /path/to/save/

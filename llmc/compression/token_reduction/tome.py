@@ -7,13 +7,6 @@ import torch.nn.functional as F
 from loguru import logger
 from transformers.models.clip.modeling_clip import CLIPEncoderLayer
 
-try:
-    from transformers.models.qwen2_vl.modeling_qwen2_vl import \
-        Qwen2VLVisionBlock
-except ModuleNotFoundError:
-    logger.info('Qwen2VLVisionBlock not found, if need, please upgrade transformers first.')
-    Qwen2VLVisionBlock = None
-
 from llmc.utils.registry_factory import TOKEN_REDUCTION_REGISTRY
 
 from .token_reduction_module import TokenReductionModule
@@ -60,32 +53,6 @@ class ToMe(TokenReductionModule):
                         tome_CLIPEncoderLayer_forward,
                         block
                     )
-                # elif isinstance(block, Qwen2VLVisionBlock): # qwenvl
-                #     block.self_attn.original_forward = block.self_attn.forward
-                #     block.self_attn.forward = types.MethodType(
-                #         tome_VisionSdpaAttention_forward,
-                #         block.self_attn
-                #     )
-                #     block.original_forward = block.forward
-                #     block.forward = types.MethodType(
-                #         tome_Qwen2VLVisionBlock_forward,
-                #         block
-                #     )
-                # else:   # intervl2   token 剪枝数量有要求
-                #     block.attn.original_naive_attn_forward = block.attn._naive_attn
-                #     block.attn._naive_attn  = types.MethodType(tome_naive_attn, block.attn)
-                #     block.attn.original_flash_attn_forward = block.attn._flash_attn
-                #     block.attn._flash_attn  = types.MethodType(tome_flash_attn, block.attn)
-                #     block.attn.original_forward = block.attn.forward
-                #     block.attn.forward = types.MethodType(
-                #         tome_InternAttention_forward,
-                #         block.attn
-                #     )
-                #     block.original_forward = block.forward
-                #     block.forward = types.MethodType(
-                #         tome_InternVisionEncoderLayer_forward,
-                #         block
-                #     )
 
 
 def do_nothing(x, mode=None):
@@ -294,120 +261,3 @@ def tome_CLIPEncoderLayer_forward(
         outputs += (attn_weights,)
 
     return outputs
-
-
-# def tome_VisionSdpaAttention_forward(
-#     self, hidden_states: torch.Tensor,
-#     cu_seqlens: torch.Tensor,
-#     rotary_pos_emb: torch.Tensor = None
-# ) -> torch.Tensor:
-#     from transformers.models.qwen2_vl.modeling_qwen2_vl import \
-#         apply_rotary_pos_emb_vision
-#     seq_length = hidden_states.shape[0]
-#     q, k, v = self.qkv(hidden_states) \
-#         .reshape(seq_length, 3, self.num_heads, -1) \
-#         .permute(1, 0, 2, 3) \
-#         .unbind(0)
-#     q = apply_rotary_pos_emb_vision(q.unsqueeze(0), rotary_pos_emb).squeeze(0)
-#     k = apply_rotary_pos_emb_vision(k.unsqueeze(0), rotary_pos_emb).squeeze(0)
-
-#     attention_mask = torch.zeros([1, seq_length, seq_length], device=q.device, dtype=torch.bool)
-#     for i in range(1, len(cu_seqlens)):
-#         start, end = cu_seqlens[i - 1], cu_seqlens[i]
-#         attention_mask[..., start:end, start:end] = True
-#     q = q.transpose(0, 1)
-#     k = k.transpose(0, 1)
-#     v = v.transpose(0, 1)
-#     attn_output = F.scaled_dot_product_attention(q, k, v, attention_mask, dropout_p=0.0)
-#     attn_output = attn_output.transpose(0, 1)
-#     attn_output = attn_output.reshape(seq_length, -1)
-#     attn_output = self.proj(attn_output)
-#     return attn_output, k.mean(1)
-
-
-# def tome_Qwen2VLVisionBlock_forward(
-#     self, hidden_states, cu_seqlens, rotary_pos_emb
-# ) -> torch.Tensor:
-#     residual = hidden_states
-#     hidden_states, key_mean = self.attn(
-#         self.norm1(hidden_states), cu_seqlens=cu_seqlens, rotary_pos_emb=rotary_pos_emb
-#     )
-#     hidden_states = residual + hidden_states
-
-#     # ToMe
-#     merge, _ = bipartite_soft_matching(
-#         key_mean,
-#         self.r,
-#         True
-#     )
-#     hidden_states, _ = merge_wavg(merge, hidden_states)
-#     hidden_states = hidden_states + self.mlp(self.norm2(hidden_states))
-#     return hidden_states
-
-# def tome_naive_attn(self, x):
-#     B, N, C = x.shape
-#     qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
-#     q, k, v = qkv.unbind(0)  # make torchscript happy (cannot use tensor as tuple)
-
-#     if self.qk_normalization:
-#         B_, H_, N_, D_ = q.shape
-#         q = self.q_norm(q.transpose(1, 2).flatten(-2, -1)).view(B_, N_, H_, D_).transpose(1, 2)
-#         k = self.k_norm(k.transpose(1, 2).flatten(-2, -1)).view(B_, N_, H_, D_).transpose(1, 2)
-
-#     attn = ((q * self.scale) @ k.transpose(-2, -1))
-#     attn = attn.softmax(dim=-1)
-#     attn = self.attn_drop(attn)
-
-#     x = (attn @ v).transpose(1, 2).reshape(B, N, C)
-#     x = self.proj(x)
-#     x = self.proj_drop(x)
-#     return x, k.mean(1)
-
-# def tome_flash_attn(self, x, key_padding_mask=None, need_weights=False):
-#     from einops import rearrange
-#     qkv = self.qkv(x)
-#     qkv = rearrange(qkv, 'b s (three h d) -> b s three h d', three=3, h=self.num_heads)
-
-#     if self.qk_normalization:
-#         q, k, v = qkv.unbind(2)
-#         q = self.q_norm(q.flatten(-2, -1)).view(q.shape)
-#         k = self.k_norm(k.flatten(-2, -1)).view(k.shape)
-#         qkv = torch.stack([q, k, v], dim=2)
-
-#     context, _ = self.inner_attn(
-#         qkv, key_padding_mask=key_padding_mask, need_weights=need_weights, causal=False
-#     )
-#     outs = self.proj(rearrange(context, 'b s h d -> b s (h d)'))
-#     outs = self.proj_drop(outs)
-#     return outs, k.mean(1)
-
-
-# def tome_InternAttention_forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-#     if self.use_flash_attn:
-#         x, key_mean = self._flash_attn(hidden_states)
-#     else:
-#         x, key_mean = self._naive_attn(hidden_states)
-#     return x, key_mean
-
-
-# def tome_InternVisionEncoderLayer_forward(
-#         self,
-#         hidden_states: torch.Tensor,
-# ) -> Tuple[torch.FloatTensor, Optional[torch.FloatTensor], Optional[Tuple[torch.FloatTensor]]]:
-
-#     residual = hidden_states
-#     x_attn, key_mean = self.attn(self.norm1(hidden_states))
-#     hidden_states = residual + self.drop_path1(x_attn * self.ls1)
-
-#     merge, _ = bipartite_soft_matching(
-#         key_mean,
-#         self.r,
-#         True
-#     )
-#     hidden_states, _ = merge_wavg(merge, hidden_states)
-
-#     residual = hidden_states
-#     hidden_states = self.drop_path2(self.mlp(self.norm2(hidden_states)) * self.ls2)
-#     hidden_states = residual + hidden_states
-
-#     return hidden_states

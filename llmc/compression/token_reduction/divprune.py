@@ -1,4 +1,3 @@
-import functools
 from functools import wraps
 from types import MethodType
 
@@ -7,7 +6,6 @@ import torch
 from llmc.utils.registry_factory import TOKEN_REDUCTION_REGISTRY
 
 from .token_reduction_module import TokenReductionModule
-from .utils import prefill_wrapper
 
 
 def pairwise_cosine_similarity(matrix):
@@ -22,7 +20,7 @@ def divprune(
     cosine_matrix=None,
     threshold_ratio=0.1,
 ):
-    threshold_terms = int(round(threshold_ratio * image_feature_length))
+    threshold_terms = round(threshold_ratio * image_feature_length)
     if cosine_matrix is None:
         cosine_matrix = 1.0 - (pairwise_cosine_similarity(visual_feature_vectors))
 
@@ -53,22 +51,16 @@ def divprune(
     return s, cosine_matrix
 
 
-def divprune_post_hook(
-    input_ids,
-    position_ids,
-    attention_mask,
-    past_key_values,
-    inputs_embeds,
-    labels,
-    pruning_paras=None,
-):
-    rate = pruning_paras['rate']
-    SYS_TOKEN_LEN = pruning_paras['image_token_start_index']
-    img_feature_len = pruning_paras['image_token_length']
+def divprune_post_hook(*args, pruning_paras=None):
+    args = list(args)
+    position_ids, attention_mask, inputs_embeds = args[1], args[2], args[4]
+    rate = pruning_paras['reduction_ratio']
+    SYS_TOKEN_LEN = pruning_paras['vision_token_start_index']
+    img_feature_len = pruning_paras['vision_token_length']
     device = inputs_embeds.device
     visual_tokens = inputs_embeds[0][SYS_TOKEN_LEN: SYS_TOKEN_LEN + img_feature_len]
     selected_visual_tokens, cosine_matrix = divprune(
-        visual_tokens, img_feature_len, None, threshold_ratio=rate
+        visual_tokens, img_feature_len, None, threshold_ratio=1 - rate
     )
 
     selected_visual_tokens += SYS_TOKEN_LEN
@@ -83,20 +75,13 @@ def divprune_post_hook(
     )
     keep_indexs = keep_indexs.sort().values
 
-    inputs_embeds = inputs_embeds[:, keep_indexs]
     if position_ids is not None:
-        position_ids = position_ids[:, keep_indexs, :]
+        args[1] = position_ids[:, keep_indexs, :]
     if attention_mask is not None:
-        attention_mask = attention_mask[:, keep_indexs]
+        args[2] = attention_mask[:, keep_indexs]
+    args[4] = inputs_embeds[:, keep_indexs]
 
-    return (
-        input_ids,
-        position_ids,
-        attention_mask,
-        past_key_values,
-        inputs_embeds,
-        labels,
-    )
+    return tuple(args)
 
 
 @TOKEN_REDUCTION_REGISTRY.register('DivPrune')
@@ -107,43 +92,34 @@ class DivPrune(TokenReductionModule):
         self.register_reduction_modules()
 
     def add_sparse_config(self):
-        self.special_config['image_token_length'] = self.model.pruning_config[
-            'image_token_length'
-        ]
-
         self.pruning_paras = self.special_config
 
     def register_reduction_modules(self):
 
-        def input_hook_llava(fn, pruning_paras):
+        def input_hook_llava(fn, pruning_paras, llava_next):
             @wraps(fn)
             def wrapper(self, *args, **kwargs):
-                if len(args) == 0:
+                if args[0].shape[1] == 1:
                     return fn(*args, **kwargs)
-                input_args = args[0]
-                if hasattr(input_args[0], 'shape') and input_args[0].shape[0] == 1:
-                    return fn(*args, **kwargs)
+                outs = fn(*args, **kwargs)
 
-                input_ids = args[0]
-                attention_mask = args[2]
-                token_indices = input_ids[0][attention_mask[0]] == IMAGE_TOKEN_INDEX
-                pruning_paras['image_token_start_index'] = torch.where(token_indices)[
-                    0
-                ][0].item()
-
-                outputs = fn(*args, **kwargs)
-
-                return divprune_post_hook(*outputs, pruning_paras=pruning_paras)
-
+                if llava_next:
+                    message = (
+                        'To obtain the vision_token_length for LLaVA-1.6, you should append '
+                        '`image_features[0].shape[0]` to the return value of the function '
+                        '`prepare_inputs_labels_for_multimodal`, and modify the related code.'
+                    )
+                    assert len(outs) == 7, message
+                    pruning_paras['vision_token_length'] = outs[-1]
+                return divprune_post_hook(*outs, pruning_paras=pruning_paras)
             return wrapper
 
         if self.model.__class__.__name__ == 'Llava':
-            from llava.constants import IMAGE_TOKEN_INDEX
 
-            hook_fn = input_hook_llava(
-                self.model.vlm_model.prepare_inputs_labels_for_multimodal,
-                self.pruning_paras,
-            )
             self.model.vlm_model.prepare_inputs_labels_for_multimodal = MethodType(
-                hook_fn, self.model.vlm_model
+                input_hook_llava(
+                    self.model.vlm_model.prepare_inputs_labels_for_multimodal,
+                    self.pruning_paras,
+                    llava_next=self.special_config['vision_token_length'] is None
+                ), self.model.vlm_model
             )

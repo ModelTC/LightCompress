@@ -1,0 +1,23 @@
+base:
+    seed: &seed 42
+model:
+    type: Llava
+    path: model path
+    torch_dtype: auto
+eval:
+    eval_pos: [pretrain, transformed]
+    type: vqa
+    name: [mme]
+    download: False
+    path: MME dataset path
+    bs: 1
+    inference_per_block: False
+sparse:
+    method: TokenReduction
+    special:
+        method: DivPrune
+        reduction_ratio: 0.9444 # 0.7778 0.8889 0.9444
+save:
+    save_trans: False
+    save_fake: False
+    save_path: /path/to/save/
