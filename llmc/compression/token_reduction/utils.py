@@ -296,7 +296,7 @@ def prepare_inputs_labels_for_multimodal_with_index_masks(
                     if 'maxpool2x2' in mm_patch_merge_type:
                         raise NotImplementedError
                     elif 'unpad' in mm_patch_merge_type and 'anyres_max' in image_aspect_ratio:
-                        NotImplementedError
+                        raise NotImplementedError
                     elif 'unpad' in mm_patch_merge_type:
                         image_feature = image_feature.permute(4, 0, 2, 1, 3).contiguous()
                         image_feature = image_feature.flatten(1, 2).flatten(2, 3)
@@ -446,7 +446,6 @@ def prepare_inputs_labels_for_multimodal_with_index_masks(
 
         cur_new_input_embeds = [x.to(self.device) for x in cur_new_input_embeds]
 
-        # import pdb; pdb.set_trace()
         cur_new_input_embeds = torch.cat(cur_new_input_embeds)
         cur_new_labels = torch.cat(cur_new_labels)
 
@@ -554,7 +553,6 @@ def prepare_inputs_labels_for_multimodal_with_index_masks(
         right_add = random.randint(left_add, self.config.pos_skipping_range)
         position_ids[:, :split_position] += left_add
         position_ids[:, split_position:] += right_add
-    # import pdb; pdb.set_trace()
     # rank0_print("Finish preparing")
     # print(vtoken_length)
     return None, position_ids, attention_mask, past_key_values, \

@@ -17,8 +17,10 @@ sparse:
         method: TokenReduction
         special:
             method: VisionZip   # retain
-            dominant: 191       # visual_tokens = dominan_tokens + 1(cls_token)
-            contextual: 30
+            dominant: 162       # visual_tokens = dominan_tokens + contextual
+            contextual: 30      # llava: 162+30,108+20,54+10 llava_next: 108+20,54+10,27+5
+            prune_only: False
+            merge_only: False
 save:
     save_trans: False
     save_fake: False
