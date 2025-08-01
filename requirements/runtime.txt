@@ -4,7 +4,7 @@ timm
 pillow
 loguru
 transformers>=4.45.2
-lmms-eval
+lmms-eval==0.3.0
 huggingface-hub
 sentencepiece
 protobuf
