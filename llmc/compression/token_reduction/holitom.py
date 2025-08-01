@@ -20,8 +20,8 @@ try:
     from llava.utils import rank0_print
     from transformers.modeling_outputs import (BaseModelOutput,
                                                BaseModelOutputWithPooling)
-except ModuleNotFoundError:
-    logger.info('LlavaMetaForCausalLM not found, if need, please install llava first.')
+except ImportError:
+    pass
 
 from llmc.utils.registry_factory import TOKEN_REDUCTION_REGISTRY
 

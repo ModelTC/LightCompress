@@ -9,8 +9,8 @@ from transformers.models.clip.modeling_clip import CLIPEncoderLayer
 
 try:
     from llava.constants import IGNORE_INDEX, IMAGE_TOKEN_INDEX
-except Exception as e:
-    logger.debug('LLaVA is not installed. Please install LLaVA to use this model.\nError: %s' % e)
+except ImportError:
+    pass
 import random
 
 

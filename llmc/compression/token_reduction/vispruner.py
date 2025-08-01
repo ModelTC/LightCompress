@@ -80,12 +80,7 @@ class VisPruner(TokenReductionModule):
             B, N, C = image_features.shape
             device = image_features.device
             index_masks = torch.ones(B, N, dtype=torch.bool, device=device)
-
-            visual_token_num = round(
-                self.special_config['vision_token_length'] * (
-                    1 - self.special_config['prune_ratio']
-                )
-            )  # T
+            visual_token_num = round(N * (1 - self.special_config['prune_ratio']))  # T
             important_ratio = self.pruning_paras['important_ratio']  # r
             important_token_num = int(visual_token_num * important_ratio)  # T_imp = T * r
             diverse_token_num = visual_token_num - important_token_num  # T_div = T * (1 - r)
@@ -143,7 +138,7 @@ class VisPruner(TokenReductionModule):
             index_masks = torch.split(index_masks, split_sizes, dim=0)
             # 'spatial_unpad', 'anyres'
             mm_patch_merge_type = getattr(model_config, 'mm_patch_merge_type', 'flat')
-            mm_patch_merge_type = mm_patch_merge_type.replace('_unpad', '')
+            # mm_patch_merge_type = mm_patch_merge_type.replace('_unpad', '')
             image_aspect_ratio = getattr(model_config, 'image_aspect_ratio', 'square')
 
             if mm_patch_merge_type == 'flat':
@@ -199,7 +194,6 @@ class VisPruner(TokenReductionModule):
                                     *image_feature.shape[:-1], 1
                                 ).to(image_feature.device)
                             ), dim=-1)
-                            image_feature = image_feature.flatten(1, 2).transpose(0, 1)
                             image_feature = image_feature.flatten(1, 2).transpose(0, 1)
                             index_mask = index_mask.permute(0, 2, 1, 3).contiguous().unsqueeze(0)
                             index_mask = index_mask.flatten(1, 2).flatten(2, 3)

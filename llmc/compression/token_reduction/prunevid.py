@@ -8,8 +8,8 @@ from torch import einsum
 
 try:
     from llava.model.llava_arch import LlavaMetaForCausalLM
-except ModuleNotFoundError:
-    logger.info('LlavaMetaForCausalLM not found, if need, please install llava first.')
+except ImportError:
+    pass
 
 from llmc.utils.registry_factory import TOKEN_REDUCTION_REGISTRY
 

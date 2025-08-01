@@ -13,8 +13,8 @@ try:
     from llava.model.multimodal_encoder.siglip_encoder import (
         SigLipVisionConfig, SigLipVisionModel)
     from llava.utils import rank0_print
-except ModuleNotFoundError:
-    logger.info('LlavaMetaForCausalLM not found, if need, please install llava first.')
+except ImportError:
+    pass
 
 from llmc.utils.registry_factory import TOKEN_REDUCTION_REGISTRY
 

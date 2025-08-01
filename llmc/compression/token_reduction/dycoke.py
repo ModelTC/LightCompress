@@ -7,8 +7,8 @@ from loguru import logger
 
 try:
     from llava.model.llava_arch import LlavaMetaForCausalLM
-except ModuleNotFoundError:
-    logger.info('LlavaMetaForCausalLM not found, if need, please install llava first.')
+except ImportError:
+    pass
 from transformers.cache_utils import Cache, DynamicCache
 
 from llmc.utils.registry_factory import TOKEN_REDUCTION_REGISTRY

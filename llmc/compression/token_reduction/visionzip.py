@@ -585,19 +585,8 @@ class VisionZip(TokenReductionModule):
             st_idx = torch.nonzero(img_mask, as_tuple=True)[0]
 
             if st_idx.numel() > 0:
-                discontinuities = torch.where(st_idx[1:] - st_idx[:-1] != 1)[0]
-                if discontinuities.numel() > 0:
-                    raise ValueError('Visual tokens are not contiguous in input_ids!')
-                    segment_starts = [st_idx[0].item()] + [st_idx[i + 1].item() for i in discontinuities.tolist()]  # noqa
-                    segment_ends = [st_idx[i].item() for i in discontinuities.tolist()] + [st_idx[-1].item()]  # noqa
-                    offset = 0
-                    for first, last in zip(segment_starts, segment_ends):
-                        length = last - first + 1
-                        # [15 1502] [1505 3289]
-                        img_mask[first: last + 1] = ~select_mask[offset: offset + length]
-                else:
-                    first, last = st_idx[0].item(), st_idx[-1].item()
-                    img_mask[first: last + 1] = ~select_mask
+                first, last = st_idx[0].item(), st_idx[-1].item()
+                img_mask[first: last + 1] = ~select_mask
                 img_mask = ~img_mask
                 contextual_input_idx = false_pos[target_indices] + first
 

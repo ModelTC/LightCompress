@@ -3,8 +3,6 @@ import types
 from typing import Callable, Optional, Tuple
 
 import torch
-import torch.nn.functional as F
-from loguru import logger
 from transformers.models.clip.modeling_clip import CLIPEncoderLayer
 
 from llmc.utils.registry_factory import TOKEN_REDUCTION_REGISTRY
@@ -20,8 +18,7 @@ class ToMe(TokenReductionModule):
         self.patch_layer()
 
     def add_sparse_config(self):
-        special_config = self.config.get('special', {})
-        r_param = special_config.get('r', 0)
+        r_param = self.special_config.get('r', 0)
         if isinstance(r_param, int) or isinstance(r_param, float):
             self.r = [max(int(r_param), 0)] * len(self.blocks)
         elif isinstance(r_param, (tuple, list)):
@@ -36,19 +33,17 @@ class ToMe(TokenReductionModule):
         else:
             raise ValueError('Invalid r format. Expected int or (start, step) tuple.')
 
-        self.pruning_paras = special_config
+        self.pruning_paras = self.special_config
 
     def patch_layer(self):
         for idx, block in enumerate(self.blocks):
             if self.r[idx] > 0:
                 block.r = self.r[idx]
                 if isinstance(block, CLIPEncoderLayer):  # llava
-                    block.self_attn.original_forward = block.self_attn.forward
                     block.self_attn.forward = types.MethodType(
                         tome_CLIPSdpaAttention_forward,
                         block.self_attn
                     )
-                    block.original_forward = block.forward
                     block.forward = types.MethodType(
                         tome_CLIPEncoderLayer_forward,
                         block
