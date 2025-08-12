@@ -17,7 +17,7 @@ sparse:
     special:
         method: DART
         pruning_loc: 5
-        reduction_ratio: 0.778
+        reduction_ratio: 0.7778
         pivot_image_token: 4
         pivot_text_token : 4
 save:

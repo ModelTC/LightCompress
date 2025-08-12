@@ -18,7 +18,7 @@ sparse:
         method: TokenReduction
         special:
             method: VisPruner
-            prune_ratio: 0.778  # 0.667 0.778 0.889
+            prune_ratio: 0.7778  # 0.6667 0.7778 0.8889
             important_ratio: 0.5
 save:
     save_trans: False

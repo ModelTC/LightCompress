@@ -48,7 +48,7 @@ class Visualizer(TokenReductionModule):
                 save_path=''
             )
             visualize_grid_to_grid(
-                visual_attention_maps[0, 4, :, :],
+                visual_attention_maps[0, 31, :, :],
                 300,
                 image,
                 grid_size=24,
@@ -72,6 +72,7 @@ class Visualizer(TokenReductionModule):
                     functools.partial(get_attentions_hook, pruning_paras=self.pruning_paras),
                 )
             if idx == (len(self.blocks) - 1):
+                # self.model.language_model.layers[-1]
                 blk.register_forward_hook(
                     functools.partial(visualizer_hook, pruning_paras=self.pruning_paras),
                 )
