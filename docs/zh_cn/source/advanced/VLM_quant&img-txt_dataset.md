@@ -1,8 +1,8 @@
-# VLM quant and custom_mm datatsets
+# VLM 量化和 custom_mm 数据集
 
 llmc目前支持对VLM模型使用图像-文本数据集进行校准并量化
 
-## VLM quant
+## VLM 量化
 当前支持的模型如下：
 1. llava
 
@@ -34,7 +34,7 @@ calib:
     padding: True
 ```
 
-## custom_mm datatsets
+## custom_mm 数据集
 custom_mm 数据集格式如下：
 ```
 custom_mm-datasets/

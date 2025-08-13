@@ -1,8 +1,8 @@
-# Vit quant and img datatsets
+# Vit 量化和 img 数据集
 
 llmc目前支持对Vit模型使用图像数据集进行校准并量化
 
-## Vit quant
+## Vit 量化
 
 下面是一个配置的例子
 
@@ -33,7 +33,7 @@ eval:
     eval_token_consist: False
 ```
 
-## img datatsets
+## img 数据集
 img数据集格式要求：img数据集目录下存在图像
 
 img数据集格式示例:

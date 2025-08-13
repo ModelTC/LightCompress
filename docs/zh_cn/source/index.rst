@@ -37,6 +37,7 @@ arxiv链接: https://arxiv.org/abs/2405.06001
    advanced/VLM_quant&img-txt_dataset.md
    advanced/mix_bits.md
    advanced/sparsification.md
+   advanced/token_reduction.md
 
 .. toctree::
    :maxdepth: 2

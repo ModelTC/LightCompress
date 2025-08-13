@@ -33,6 +33,8 @@ docker pull registry.cn-hangzhou.aliyuncs.com/yongyang/llmcompression:pure-lates
 
 ## :fire: 最新动态
 
+- **2025年8月13日:** 🚀 我们已开源针对 **视觉语言模型（VLMs）** 的压缩方案，支持共计超过 **20 种算法**，涵盖 **token reduction** 和 **quantization**。此次发布为多模态任务提供了灵活、即插即用的压缩策略。具体请参阅[文档](https://llmc-zhcn.readthedocs.io/en/latest/advanced/token_reduction.html)。
+
 - **2025年5月12日：** 🔥 我们现已全面支持 **`Wan2.1`** 系列视频生成模型的量化，并支持导出真实量化的 **INT8/FP8** 权重，兼容 [lightx2v](https://github.com/ModelTC/lightx2v) 推理框架。详情请参考 [lightx2v 使用文档](https://llmc-zhcn.readthedocs.io/en/latest/backend/lightx2v.html)。
 
 - **2025年2月7日:** 🔥 我们现已全面支持 **`DeepSeekv3`**、**`DeepSeek-R1`** 和 **`DeepSeek-R1-zero`** 等 671B 大规模 **`MOE`** 模型的量化。 您可以直接加载 `FP8` 权重，无需额外转换，使用单张 80G 显存的 GPU 即可运行 `AWQ` 和 `RTN` 量化，同时还支持导出真实量化的 **INT4/INT8** 权重
