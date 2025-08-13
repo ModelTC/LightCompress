@@ -401,6 +401,26 @@ quant:
         granularity: per_token
 ```
 
+## sparse
+
+<font color=792ee5> sparse.method </font>
+
+使用的稀疏化算法名，这包含对[模型的稀疏化](https://github.com/ModelTC/LightCompress/blob/main/llmc/compression/sparsification/__init__.pyn)和对视觉token的[reduction](https://github.com/ModelTC/LightCompress/blob/main/llmc/compression/token_reduction/__init__.py)，所有支持算法可以在文件中查看。
+
+值得说明的是针对模型稀疏化，需要指定具体的算法名称，而token reduction只需要先指定为`TokenReduction`，在`special`中继续指定具体的算法。
+
+```yaml
+sparse:
+    method: Wanda
+```
+
+```yaml
+sparse:
+    method: TokenReduction
+    special:
+        method: FastV
+```
+
 ## save
 
 <font color=792ee5> save.save_vllm </font>

@@ -360,6 +360,26 @@ quant:
         static: True
 ```
 
+## sparse
+
+<font color=792ee5> sparse.method </font>
+
+The name of the sparsification algorithm used. This includes both [model sparsification](https://github.com/ModelTC/LightCompress/blob/main/llmc/compression/sparsification/__init__.pyn) and [reduction](https://github.com/ModelTC/LightCompress/blob/main/llmc/compression/token_reduction/__init__.py) of visual tokens. All supported algorithms can be found in the corresponding files.
+
+It’s worth noting that for model sparsification, you need to specify the exact algorithm name, whereas for token reduction, you only need to set it to `TokenReduction` first, and then specify the exact algorithm under `special`.
+
+```yaml
+sparse:
+    method: Wanda
+```
+
+```yaml
+sparse:
+    method: TokenReduction
+    special:
+        method: FastV
+```
+
 ## save
 
 <font color=792ee5> save.save_vllm</font>
