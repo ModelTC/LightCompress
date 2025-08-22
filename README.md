@@ -3,9 +3,12 @@
 
 <img src="./imgs/llmc.png" alt="llmc" width="75%" />
 
+<img src="./imgs/llmc+.png" alt="llmc" width="75%" />
+
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ModelTC/LightCompress)
 [![arXiv](https://img.shields.io/badge/LLMC-2405.06001-b31b1b)](https://arxiv.org/abs/2405.06001)
+[![arXiv](https://img.shields.io/badge/LLMC+-2508.09981-b31b1b)](https://arxiv.org/abs/2508.09981)
 [![Discord Banner](https://img.shields.io/discord/1139835312592392214?logo=discord&logoColor=white)](https://discord.com/invite/NfJzbkK3jY)
 [![QQ](https://img.shields.io/badge/QQ-EB1923?logo=tencent-qq&logoColor=white)](http://qm.qq.com/cgi-bin/qm/qr?_wv=1027&k=I9IGPWWj8uuRXWH3_ELWjouf6gkIMgUl&authKey=GA3WbFAsm90ePJf%2FCbc7ZyXXq4ShQktlBaLxgqS5yuSPAsr3%2BDKMRdosUiLYoilO&noverify=0&group_code=526192592)
 [![Doc](https://img.shields.io/badge/docs-English-99cc2)](https://llmc-en.readthedocs.io/en/latest/)
@@ -156,6 +159,27 @@ You can add your own model type referring to files under `llmc/models/*.py`.
 
 ## 💡 Supported Algorithm List
 
+### Token Reduction
+
+- ✅ [ToMe](https://arxiv.org/abs/2210.09461)
+- ✅ [FastV](https://arxiv.org/abs/2403.06764)
+- ✅ [SparseVLM](https://arxiv.org/abs/2410.04417)
+- ✅ [VisionZip](https://arxiv.org/abs/2412.04467)
+
+<details>
+<summary>More Supported Algorithms&nbsp</summary>
+
+- ✅ [PyramidDrop](https://arxiv.org/abs/2410.17247)
+- ✅ [VisPruner](https://arxiv.org/abs/2412.01818)
+- ✅ [MustDrop](https://arxiv.org/abs/2411.10803)
+- ✅ [DART](https://arxiv.org/abs/2502.11494)
+- ✅ [DyCoke](https://arxiv.org/abs/2411.15024)
+- ✅ [PruneVid](https://arxiv.org/abs/2412.16117)
+- ✅ [FastVID](https://arxiv.org/abs/2503.11187)
+- ✅ [HoliTom](https://arxiv.org/abs/2505.21334)
+
+</details>
+
 ### Quantization
 
 - ✅ Naive
@@ -222,6 +246,15 @@ We develop our code referring to the following repos:
 ## ✏️ Citation
 
 If you find our toolkit or research paper useful or relevant to your research, please kindly cite our work:
+
+```
+@article{lv2025llmc+,
+  title={LLMC+: Benchmarking Vision-Language Model Compression with a Plug-and-play Toolkit},
+  author={Lv, Chengtao and Zhang, Bilang and Yong, Yang and Gong, Ruihao and Huang, Yushi and Gu, Shiqiao and Wu, Jiajun and Shi, Yumeng and Guo, Jinyang and Wang, Wenya},
+  journal={arXiv preprint arXiv:2508.09981},
+  year={2025}
+}
+```
 
 ```
 @inproceedings{DBLP:conf/emnlp/GongYGHLZT024,
