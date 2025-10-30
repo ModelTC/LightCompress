@@ -228,6 +228,14 @@ class RandomPrune(TokenReductionModule):
             layer_attention = layer_outputs[1]
             pruning_paras['attn_scores'] = layer_attention
 
+        @prefill_wrapper
+        def vtoken_length_hook(module, args, pruning_paras):
+            input_ids = args[0]
+            token_indices = torch.where(
+                input_ids[0] == pruning_paras['vision_token_index']
+            )[0]
+            pruning_paras['vision_token_length'] = token_indices.shape[0]
+
         if self.special_config['vision_token_length'] is None:
             if self.model.__class__.__name__ == 'Llava':
                 self.model.vlm_model.prepare_inputs_labels_for_multimodal = MethodType(
@@ -235,6 +243,10 @@ class RandomPrune(TokenReductionModule):
                         self.model.vlm_model.prepare_inputs_labels_for_multimodal,
                         self.pruning_paras
                     ), self.model.vlm_model
+                )
+            elif self.model.__class__.__name__ == 'Qwen2_5VL':
+                self.model.embed_tokens.register_forward_pre_hook(
+                    functools.partial(vtoken_length_hook, pruning_paras=self.pruning_paras)
                 )
 
         if self.special_config['metric'] == 'random':

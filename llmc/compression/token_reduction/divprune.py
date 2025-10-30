@@ -1,3 +1,4 @@
+import functools
 from functools import wraps
 from types import MethodType
 
@@ -6,6 +7,7 @@ import torch
 from llmc.utils.registry_factory import TOKEN_REDUCTION_REGISTRY
 
 from .token_reduction_module import TokenReductionModule
+from .utils import prefill_wrapper
 
 
 def pairwise_cosine_similarity(matrix):
@@ -84,6 +86,41 @@ def divprune_post_hook(*args, pruning_paras=None):
     return tuple(args)
 
 
+def prune_qwenv25vl_hook(module, args, kwargs, pruning_paras):
+    if kwargs['position_ids'].shape[-1] == 1:
+        return args, kwargs
+    inputs_embeds = kwargs['inputs_embeds']
+    attention_mask = kwargs['attention_mask']
+    rate = pruning_paras['reduction_ratio']
+    SYS_TOKEN_LEN = pruning_paras['vision_token_start_index']
+    img_feature_len = pruning_paras['vision_token_length']
+    device = inputs_embeds.device
+
+    visual_tokens = inputs_embeds[0][SYS_TOKEN_LEN: SYS_TOKEN_LEN + img_feature_len]
+    selected_visual_tokens, cosine_matrix = divprune(
+        visual_tokens, img_feature_len, None, threshold_ratio=1 - rate
+    )
+    selected_visual_tokens += SYS_TOKEN_LEN
+    keep_indexs = torch.cat(
+        (
+            torch.arange(SYS_TOKEN_LEN, device=device),
+            selected_visual_tokens,
+            torch.arange(
+                SYS_TOKEN_LEN + img_feature_len, inputs_embeds.shape[1], device=device
+            ),
+        )
+    )
+    keep_indexs = keep_indexs.sort().values
+
+    kwargs['inputs_embeds'] = inputs_embeds[:, keep_indexs, :]
+    kwargs['position_ids'] = kwargs['position_ids'][:, :, keep_indexs]
+    if attention_mask is not None:
+        kwargs['attention_mask'] = attention_mask[:, keep_indexs]
+    kwargs['cache_position'] = keep_indexs
+
+    return args, kwargs
+
+
 @TOKEN_REDUCTION_REGISTRY.register('DivPrune')
 class DivPrune(TokenReductionModule):
     def __init__(self, config, model, blocks):
@@ -114,6 +151,14 @@ class DivPrune(TokenReductionModule):
                 return divprune_post_hook(*outs, pruning_paras=pruning_paras)
             return wrapper
 
+        @prefill_wrapper
+        def vtoken_length_hook(module, args, pruning_paras):
+            input_ids = args[0]
+            token_indices = torch.where(
+                input_ids[0] == pruning_paras['vision_token_index']
+            )[0]
+            pruning_paras['vision_token_length'] = token_indices.shape[0]
+
         if self.model.__class__.__name__ == 'Llava':
 
             self.model.vlm_model.prepare_inputs_labels_for_multimodal = MethodType(
@@ -122,4 +167,16 @@ class DivPrune(TokenReductionModule):
                     self.pruning_paras,
                     llava_next=self.special_config['vision_token_length'] is None
                 ), self.model.vlm_model
+            )
+        elif self.model.__class__.__name__ == 'Qwen2_5VL':
+
+            self.model.embed_tokens.register_forward_pre_hook(
+                functools.partial(vtoken_length_hook, pruning_paras=self.pruning_paras)
+            )
+            self.model.language_model.register_forward_pre_hook(
+                functools.partial(
+                    prune_qwenv25vl_hook,
+                    pruning_paras=self.pruning_paras,
+                ),
+                with_kwargs=True
             )

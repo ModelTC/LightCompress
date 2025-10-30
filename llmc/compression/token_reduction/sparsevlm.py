@@ -17,6 +17,7 @@ merge_flag = True
 sparse_token_list_192 = []
 sparse_token_list_128 = []
 sparse_token_list_64 = []
+sparse_token_list_960 = []
 sparse_token_list_640 = []
 sparse_token_list_320 = []
 sparse_token_list_160 = []
@@ -329,8 +330,9 @@ class SparseVLM(TokenReductionModule):
 
             if attention_mask is not None:
                 attention_mask = attention_mask[:, :, keep_indexs, keep_indexs]
-            new_pe0 = position_embeddings[0][:, keep_indexs, :].clone()
-            new_pe1 = position_embeddings[1][:, keep_indexs, :].clone()
+            index_dim = 1 if position_embeddings[0].dim() == 3 else 2
+            new_pe0 = position_embeddings[0].index_select(index_dim, keep_indexs).clone()
+            new_pe1 = position_embeddings[1].index_select(index_dim, keep_indexs).clone()
             position_embeddings = (new_pe0, new_pe1)
 
             pruning_paras['v_token_num'] = v_token_num
@@ -352,6 +354,75 @@ class SparseVLM(TokenReductionModule):
 
             return args, kwargs
 
+        @prefill_wrapper
+        def vtoken_length_hook(module, args, pruning_paras):
+            input_ids = args[0]
+            token_indices = torch.where(
+                input_ids[0] == pruning_paras['vision_token_index']
+            )[0]
+            pruning_paras['vision_token_length'] = token_indices.shape[0]
+            pruning_paras['pre_prompt_length_list'] = [token_indices[0].item()]
+
+        def get_attn_logits_for_qwen25vl(
+                module,
+                args, kwargs, layer_outs,
+                pruning_paras, layer_idx
+        ):
+            if kwargs['position_ids'].shape[-1] == 1:
+                return layer_outs
+
+            from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import (
+                apply_multimodal_rotary_pos_emb, repeat_kv)
+
+            hidden_states = kwargs['hidden_states']
+            position_embeddings = kwargs['position_embeddings']
+            past_key_value = layer_outs[2]
+            attention_mask = kwargs['attention_mask']
+
+            t_token_idx = pruning_paras['t_token_idx']
+            v_token_start = pruning_paras['v_token_start']
+            v_token_num = pruning_paras['v_token_num']
+
+            bsz, q_len, _ = hidden_states.size()
+
+            query_states = module.q_proj(hidden_states)
+            key_states = module.k_proj(hidden_states)
+            value_states = module.v_proj(hidden_states)
+
+            query_states = query_states.view(bsz, q_len, -1, module.head_dim).transpose(1, 2)
+            key_states = key_states.view(bsz, q_len, -1, module.head_dim).transpose(1, 2)
+            value_states = value_states.view(bsz, q_len, -1, module.head_dim).transpose(1, 2)
+
+            cos, sin = position_embeddings
+            query_states, key_states = apply_multimodal_rotary_pos_emb(
+                query_states, key_states, cos, sin, module.rope_scaling['mrope_section']
+            )
+
+            if past_key_value is not None:
+                key_states = past_key_value.key_cache[layer_idx]
+                value_states = past_key_value.value_cache[layer_idx]
+
+            key_states = repeat_kv(key_states, module.num_key_value_groups)
+            value_states = repeat_kv(value_states, module.num_key_value_groups)
+
+            t_token_idx = t_token_idx[1] + v_token_start + v_token_num
+            L, S = query_states.size(-2), key_states.size(-2)
+            scale_factor = 1 / math.sqrt(query_states.size(-1))
+            attn_bias = torch.zeros(L, S, dtype=query_states.dtype)
+            if module.is_causal:
+                assert attention_mask is None
+                temp_mask = torch.ones(L, S, dtype=torch.bool).tril(diagonal=0)
+                attn_bias.masked_fill_(temp_mask.logical_not(), float('-inf'))
+                attn_bias.to(query_states.dtype)
+
+            attn_logits = query_states @ key_states.transpose(2, 3) * scale_factor
+            attn_logits += attn_bias.to(query_states.device)
+            attn_logits = torch.softmax(attn_logits, dim=-1)
+
+            pruning_paras['attn_logits'] = attn_logits
+
+            return layer_outs
+
         if self.model.__class__.__name__ == 'LlavaHf':
             self.model.embed_tokens.register_forward_pre_hook(
                 functools.partial(input_hook, pruning_paras=self.pruning_paras)
@@ -364,11 +435,17 @@ class SparseVLM(TokenReductionModule):
                     llava_next=self.special_config['vision_token_length'] is None
                 ), self.model.vlm_model
             )
+        elif self.model.__class__.__name__ == 'Qwen2_5VL':
+            self.model.embed_tokens.register_forward_pre_hook(
+                functools.partial(vtoken_length_hook, pruning_paras=self.pruning_paras)
+            )
 
         if self.model.__class__.__name__ == 'LlavaHf':
             llama_model = self.model.model
         elif self.model.__class__.__name__ == 'Llava':
             llama_model = self.model.model.model
+        elif self.model.__class__.__name__ == 'Qwen2_5VL':
+            llama_model = self.model.language_model
         llama_model.register_forward_pre_hook(
             functools.partial(register_module_paras, pruning_paras=self.pruning_paras),
             with_kwargs=True
@@ -405,6 +482,23 @@ class SparseVLM(TokenReductionModule):
                         ),
                         with_kwargs=True
                     )
+                elif self.model.__class__.__name__ == 'Qwen2_5VL':
+                    self.blocks[block_idx].register_forward_pre_hook(
+                        functools.partial(
+                            update_kwargs_hook,
+                            pruning_paras=self.pruning_paras,
+                            layer_idx=block_idx,
+                        ),
+                        with_kwargs=True
+                    )
+                    self.blocks[block_idx].self_attn.register_forward_hook(
+                        functools.partial(
+                            get_attn_logits_for_qwen25vl,
+                            pruning_paras=self.pruning_paras,
+                            layer_idx=block_idx,
+                        ),
+                        with_kwargs=True
+                    )
                 self.blocks[block_idx].register_forward_hook(
                     functools.partial(
                         decoder_attn_hook,
@@ -425,7 +519,7 @@ class SparseVLM(TokenReductionModule):
 
 def update_list():
     global sparse_token_list_192, sparse_token_list_128, sparse_token_list_64
-    global sparse_token_list_640, sparse_token_list_320, sparse_token_list_160
+    global sparse_token_list_960, sparse_token_list_640, sparse_token_list_320, sparse_token_list_160  # noqa
     global prune_flag, merge_flag, sparse_token_dict
 
     if layer_dict == {2: 0, 6: 1, 15: 2}:  # 2*576  4*300 10*200  16*110
@@ -437,6 +531,7 @@ def update_list():
         sparse_token_list_192 = [180]
         sparse_token_list_128 = [114]
         sparse_token_list_64 = [48]
+        sparse_token_list_960 = [0.3125]
         sparse_token_list_640 = [0.1979]
         sparse_token_list_320 = [0.0833]
         sparse_token_list_160 = [0.0261]
@@ -444,6 +539,7 @@ def update_list():
         sparse_token_list_192 = [192]
         sparse_token_list_128 = [128]
         sparse_token_list_64 = [64]
+        sparse_token_list_960 = [0.3333]
         sparse_token_list_640 = [0.2222]
         sparse_token_list_320 = [0.1111]
         sparse_token_list_160 = [0.0555]
@@ -460,6 +556,7 @@ def update_list():
         192: sparse_token_list_192,
         128: sparse_token_list_128,
         64: sparse_token_list_64,
+        960: sparse_token_list_960,
         640: sparse_token_list_640,
         320: sparse_token_list_320,
         160: sparse_token_list_160
