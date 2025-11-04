@@ -20,7 +20,10 @@ class Qwen2Moe(BaseModel):
         self.pairs = {'q_proj': 'qkv', 'o_proj': 'out', 'up_proj': 'fc1'}
 
     def get_embed_layers(self):
-        return [self.embed_tokens, self.rotary_emb]
+        return [self.embed_tokens]
+
+    def get_attention_rotary_layers(self):
+        return [self.rotary_emb]
 
     def get_head_layers(self):
         return [self.model.lm_head]

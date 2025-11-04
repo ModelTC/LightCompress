@@ -8,6 +8,7 @@ from .glm4v import GLM4V
 from .internlm2 import InternLM2
 from .internomni import InternOmni
 from .internvl2 import InternVL2
+from .internvl3_5 import InternVL3_5
 from .llama import Llama
 from .llava import Llava
 from .llava_hf import LlavaHf
@@ -26,6 +27,8 @@ from .qwen2_5vl import Qwen2_5VL
 from .qwen2audio import Qwen2Audio
 from .qwen2moe import Qwen2Moe
 from .qwen2vl import Qwen2VL
+from .qwen3 import Qwen3
+from .qwen3moe import Qwen3Moe
 from .smollm import SmolLM
 from .stablelm import StableLm
 from .starcoder import Starcoder
