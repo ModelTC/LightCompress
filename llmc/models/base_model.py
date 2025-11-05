@@ -378,27 +378,7 @@ class BaseModel(metaclass=ABCMeta):
     def get_moe_gate(self, block):
         return None
 
-    def replace_vision_module_all(self, module, params_dict, keep_device=False):
-        vision_model_linears = self.get_block_linears(self.vision_model)
-        for name, m in vision_model_linears.items():
-            M = module.new(m, **params_dict)
-
-            name_tmp = name.rsplit('.', 1)
-            if len(name_tmp) == 2:
-                parent_name = name_tmp[0]
-                parent = self.vision_model.get_submodule(parent_name)
-                child_name = name_tmp[1]
-            elif len(name_tmp) == 1:
-                parent = self.vision_model
-                child_name = name_tmp[0]
-
-            setattr(parent, child_name, M)
-
-        gc.collect()
-        torch.cuda.empty_cache()
-        logger.info(f'The Replaced vision_model: {self.vision_model}')
-
-    def replace_language_module_all(self, module, params_dict, keep_device=False):
+    def replace_module_all(self, module, params_dict, keep_device=False):
         for block_idx in range(len(self.blocks)):
             logger.info(f'Replace block index: {block_idx}/{len(self.blocks)}')
             if keep_device:
@@ -409,20 +389,6 @@ class BaseModel(metaclass=ABCMeta):
                 self.blocks[block_idx].cpu()
             gc.collect()
             torch.cuda.empty_cache()
-        logger.info(f'The Replaced model: {self.model}')
-
-    def replace_video_gen_module_all(self, module, params_dict, keep_device=False):
-        for block_idx in range(len(self.blocks)):
-            logger.info(f'Replace block index: {block_idx}/{len(self.blocks)}')
-            if keep_device:
-                self.replace_module_block(module, self.blocks[block_idx], block_idx, params_dict)
-            else:
-                self.blocks[block_idx].cuda()
-                self.replace_module_block(module, self.blocks[block_idx], block_idx, params_dict)
-                self.blocks[block_idx].cpu()
-            gc.collect()
-            torch.cuda.empty_cache()
-        logger.info(f'The Replaced model: {self.model}')
 
     def replace_module_block(self, module, block, block_idx, params_dict):
         if module in _LLMC_LN_TYPES_ + _TRANSFORMERS_LN_TYPES_:

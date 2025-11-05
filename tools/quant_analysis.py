@@ -441,7 +441,7 @@ if __name__ == '__main__':
         params_dict = {}
         params_dict['w_qdq'] = wquanter.fake_quant_weight_dynamic
         params_dict['a_qdq'] = None if args.w_only else a_qdq
-        t_model.replace_language_module_all(FakeQuantLinear, params_dict)
+        t_model.replace_module_all(FakeQuantLinear, params_dict)
 
     with torch.no_grad():
         for i in tqdm(range(len(model.blocks))):

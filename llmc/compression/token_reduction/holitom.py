@@ -594,7 +594,6 @@ class LlavaMetaForCausalLM_holitom(ABC):
         if isinstance(modalities, str):
             modalities = [modalities]
 
-        # import pdb; pdb.set_trace()
         if type(images) is list or images.ndim == 5:
             mm_patch_merge_type = getattr(self.config, 'mm_patch_merge_type', 'flat')
             image_aspect_ratio = getattr(self.config, 'image_aspect_ratio', 'square')
@@ -733,7 +732,7 @@ class LlavaMetaForCausalLM_holitom(ABC):
                     # currently image_feature is a tensor of shape (4, num_patches, hidden_size)
                     # we want to first unflatten it to (2, 2, h, w, hidden_size)
                     # rank0_print("At least we are reaching here")
-                    # import pdb; pdb.set_trace()
+
                     if image_idx in video_idx_in_batch:  # video operations
                         # rank0_print("Video")
                         if mm_newline_position == 'grid':
@@ -1032,7 +1031,6 @@ class LlavaMetaForCausalLM_holitom(ABC):
 
             cur_new_input_embeds = [x.to(self.device) for x in cur_new_input_embeds]
 
-            # import pdb; pdb.set_trace()
             cur_new_input_embeds = torch.cat(cur_new_input_embeds)
             cur_new_labels = torch.cat(cur_new_labels)
 
@@ -1157,7 +1155,7 @@ class LlavaMetaForCausalLM_holitom(ABC):
             right_add = random.randint(left_add, self.config.pos_skipping_range)
             position_ids[:, :split_position] += left_add
             position_ids[:, split_position:] += right_add
-        # import pdb; pdb.set_trace()
+
         # rank0_print("Finish preparing")
         return (
             None,

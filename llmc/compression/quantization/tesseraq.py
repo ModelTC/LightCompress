@@ -3,7 +3,6 @@ import functools
 import gc
 import math
 import os
-import pdb
 import random
 from contextlib import nullcontext
 from math import inf
@@ -268,7 +267,6 @@ class TesseraQ(BaseBlockwiseQuantization):
 
                     if not math.isfinite(loss.item()):
                         logger.info('Loss is NAN, stopping training')
-                        pdb.set_trace()
 
                     optimizer.zero_grad()
 

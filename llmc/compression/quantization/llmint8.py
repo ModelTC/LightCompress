@@ -66,7 +66,7 @@ class LlmInt8(BaseBlockwiseQuantization):
         logger.info(f'-- deploy_{quant_format}_model start --')
         logger.info(f'quant_config : {self.quant_config}')
 
-        self.model.replace_language_module_all(
+        self.model.replace_module_all(
             FakeQuantLinear,
             self.get_replacement_params(
                 mode='fake_quant', w_only=self.w_only, name=None

@@ -22,7 +22,6 @@ class Qwen2(BaseModel):
 
     def find_block_name(self):
         self.block_name_prefix = 'model.layers'
-        self.pairs = {'q_proj': 'qkv', 'o_proj': 'out', 'up_proj': 'fc1'}
 
     def get_embed_layers(self):
         return [self.embed_tokens]

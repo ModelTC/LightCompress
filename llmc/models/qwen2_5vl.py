@@ -2,7 +2,6 @@
 from typing import Optional, Union
 
 import torch
-import torch.nn as nn
 from accelerate import Accelerator, DistributedType
 from loguru import logger
 from transformers import AutoConfig, AutoProcessor, AutoTokenizer
@@ -15,17 +14,15 @@ except Exception:
         'If you need it, please upgrade transformers.'
     )
 
-try:
-    from qwen_vl_utils import process_vision_info
-except Exception:
-    logger.warning(
-        'Can not import qwen_vl_utils. '
-        'If you need it, please pip install qwen-vl-utils'
-    )
-
 from llmc.utils.registry_factory import MODEL_REGISTRY
 
 from .qwen2vl import Qwen2VL
+
+#  settings for qwen2_5_vl:
+#  pip install transformers==4.51.3
+#  pip install git+https://github.com/EvolvingLMMs-Lab/lmms-eval.git@v0.3.5
+#  And you should add the following at line 92 of llmc/eval/eval_vqa.py:
+#  import argparse; cli_args = argparse.Namespace(process_with_media=True)
 
 
 @MODEL_REGISTRY
@@ -76,7 +73,6 @@ class Qwen2_5VL(Qwen2VL):
         }
         self.first_turn_question = True
 
-    # todo: check
     def get_subsets_in_block(self, block):
         if self.get_modality() == 'language':
             return super().get_subsets_in_block(block)
@@ -152,14 +148,6 @@ try:
             # Do not use kwargs for now
             assert kwargs == {}, f'Unexpected kwargs: {kwargs}'
 
-            # Validate attention implementation
-            valid_attn_implementations = [None, 'flash_attention_2', 'sdpa', 'eager']
-            if attn_implementation not in valid_attn_implementations:
-                raise ValueError(
-                    f'attn_implementation must be one of {valid_attn_implementations}, \
-                    got {attn_implementation}'
-                )
-
             self.use_custom_video_loader = use_custom_video_loader
             self.fps = fps
             # if self.fps and not self.use_custom_video_loader:
@@ -177,16 +165,6 @@ try:
             else:
                 self._device = torch.device(device)
                 self.device_map = device_map if device_map else device
-
-            # Prepare model loading arguments
-            model_kwargs = {
-                'torch_dtype': 'auto',
-                'device_map': self.device_map,
-            }
-
-            # Add attention implementation if specified
-            if attn_implementation is not None:
-                model_kwargs['attn_implementation'] = attn_implementation
 
             self._model = llmc_model.eval().cuda()
             self.max_pixels = max_pixels

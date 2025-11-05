@@ -25,22 +25,38 @@ eval:
     bs: 1
     inference_per_block: False
 quant:
-    method: GPTQ
-    quant_objects: [vision, language] # default is [language]
-    weight:
-        bit: 4
-        symmetric: False
-        granularity: per_group
-        group_size: 128
-        # calib_algo: mse
-        # mse_b_num: 2
-    special:
-        actorder: True
-        static_groups: False
-        percdamp: 0.01
-        blocksize: 128
-        true_sequential: True
-    quant_out: True
+    vision:
+        method: GPTQ
+        weight:
+            bit: 4
+            symmetric: False
+            granularity: per_group
+            group_size: 128
+            # calib_algo: mse
+            # mse_b_num: 2
+        special:
+            actorder: True
+            static_groups: False
+            percdamp: 0.01
+            blocksize: 128
+            true_sequential: True
+        quant_out: True
+    language:
+        method: GPTQ
+        weight:
+            bit: 4
+            symmetric: False
+            granularity: per_group
+            group_size: 128
+            # calib_algo: mse
+            # mse_b_num: 2
+        special:
+            actorder: True
+            static_groups: False
+            percdamp: 0.01
+            blocksize: 128
+            true_sequential: True
+        quant_out: True
 save:
     save_fake: False
     save_path: /path/to/save/

@@ -13,17 +13,28 @@ eval:
     bs: 1
     inference_per_block: False
 quant:
-    method: RTN
-    quant_objects: [vision, language] # default is [language]
-    weight:
-        bit: 8
-        symmetric: True
-        granularity: per_channel
-        group_size: -1
-    act:
-        bit: 8
-        symmetric: True
-        granularity: per_token
+    vision:
+        method: RTN
+        weight:
+            bit: 8
+            symmetric: True
+            granularity: per_channel
+            group_size: -1
+        act:
+            bit: 8
+            symmetric: True
+            granularity: per_token
+    language:
+        method: RTN
+        weight:
+            bit: 8
+            symmetric: True
+            granularity: per_channel
+            group_size: -1
+        act:
+            bit: 8
+            symmetric: True
+            granularity: per_token
 save:
     save_fake: False
     save_path: /path/to/save/

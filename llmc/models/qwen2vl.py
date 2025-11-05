@@ -187,27 +187,6 @@ class Qwen2VL(Qwen2):
         else:
             raise Exception(f'Qwen2VL do not support {self.get_modality()} modality.')
 
-    def get_catcher(self, first_block_input):
-        class Catcher(nn.Module):
-            def __init__(self, module):
-                super().__init__()
-                self.module = module
-                self.mlp = self.module.mlp
-                self.signature = inspect.signature(module.forward)
-
-            def forward(self, *args, **kwargs):
-                params = list(self.signature.parameters.keys())
-                for i, arg in enumerate(args):
-                    if i > 0:
-                        kwargs[params[i]] = arg
-                first_block_input['data'].append(args[0])
-                if 'output_router_logits' in kwargs:
-                    assert kwargs['output_router_logits'] is False
-                    kwargs.pop('output_router_logits')
-                first_block_input['kwargs'].append(kwargs)
-                raise ValueError
-        return Catcher
-
 
 try:
     from lmms_eval.api.model import lmms

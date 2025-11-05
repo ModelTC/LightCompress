@@ -157,7 +157,7 @@ class InternVL3_5():
         if language_part == 'qwen3':
             from .qwen3 import Qwen3
 
-            class NewClass(InternVL2SharedBehavior, Qwen3):
+            class NewClass(InternVL3_5SharedBehavior, Qwen3):
                 def __init__(self, config, device_map=None, use_cache=False):
                     super().__init__(config, device_map, use_cache)
                     setattr(
@@ -170,7 +170,7 @@ class InternVL3_5():
         return NewClass(config, device_map, use_cache)
 
 
-class InternVL2SharedBehavior():
+class InternVL3_5SharedBehavior():
     def build_model(self):
         self.eval_name = 'InternVL3_5Eval'
         self.vlm_model_config = AutoConfig.from_pretrained(

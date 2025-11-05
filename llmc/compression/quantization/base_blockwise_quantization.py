@@ -949,20 +949,11 @@ class BaseBlockwiseQuantization(BlockwiseOpt):
             self.set_no_quant_layer()
 
         module = module_mapping[quant_format]
-        if self.modality == 'vision':
-            self.model.replace_vision_module_all(
-                module,
-                self.get_replacement_params(mode=quant_format, w_only=self.w_only),
-                keep_device=keep_device,
-            )
-        if self.modality == 'language':
-            self.model.replace_language_module_all(
-                module,
-                self.get_replacement_params(mode=quant_format, w_only=self.w_only),
-                keep_device=keep_device,
-            )
-        if self.modality == 'video_gen':
-            self.model.replace_video_gen_module_all(
+
+        self.model.set_modality(self.modality)
+        logger.info(f'set modality: {self.modality}')
+        if self.modality in ('vision', 'language', 'video_gen'):
+            self.model.replace_module_all(
                 module,
                 self.get_replacement_params(mode=quant_format, w_only=self.w_only),
                 keep_device=keep_device,
