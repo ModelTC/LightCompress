@@ -8,12 +8,15 @@ class Falcon(BaseModel):
     def __init__(self, config, device_map=None, use_cache=False):
         super().__init__(config, device_map, use_cache)
 
+    def _is_new_decoder_architecture(self):
+        return getattr(self.model_config, 'new_decoder_architecture', False)
+
     def find_blocks(self):
         self.blocks = self.model.transformer.h
 
     def find_embed_layers(self):
         self.word_embeddings = self.model.transformer.word_embeddings
-        self.rotary_emb = self.model.model.rotary_emb
+        self.rotary_emb = self.model.transformer.rotary_emb
 
     def find_block_name(self):
         self.block_name_prefix = 'model.transformer.h'
@@ -25,30 +28,31 @@ class Falcon(BaseModel):
         return [self.rotary_emb]
 
     def get_layers_except_blocks(self):
-        return [self.word_embeddings, self.rotary_emb, self.model.transformer.ln_f]
+        return [self.word_embeddings, self.rotary_emb, self.model.transformer.ln_f,
+                self.model.lm_head]
+
+    def skip_layer_name(self):
+        return ['lm_head']
 
     def has_bias(self):
-        return False
+        return getattr(self.model_config, 'bias', False)
 
     def get_layernorms_in_block(self, block):
-        if block.config.architectures[0] == 'RWForCausalLM':
-            new_decoder_architecture = False
-        elif block.config.architectures[0] == 'FalconForCausalLM':
-            new_decoder_architecture = True
-        if new_decoder_architecture:
+        if self._is_new_decoder_architecture():
             return {'ln_attn': block.ln_attn, 'ln_mlp': block.ln_mlp}
         else:
-            if block.config.parallel_attn:
+            if getattr(block.config, 'parallel_attn', False):
                 return {'input_layernorm': block.input_layernorm}
             else:
-                return {'post_attention_layernorm': block.post_attention_layernorm}
+                return {
+                    'input_layernorm': block.input_layernorm,
+                    'post_attention_layernorm': block.post_attention_layernorm,
+                }
 
     def get_subsets_in_block(self, block):
-        if block.config.architectures[0] == 'RWForCausalLM':
-            new_decoder_architecture = False
-        elif block.config.architectures[0] == 'FalconForCausalLM':
-            new_decoder_architecture = True
-        if new_decoder_architecture:
+        new_arch = self._is_new_decoder_architecture()
+
+        if new_arch:
             subset1 = {
                 'layers': {
                     'self_attention.query_key_value': (
@@ -79,7 +83,7 @@ class Falcon(BaseModel):
                 'inspect': block.self_attention.query_key_value,
                 'has_kwargs': False,
             }
-            if block.config.parallel_attn:
+            if getattr(block.config, 'parallel_attn', False):
                 subset3 = {
                     'layers': {'mlp.dense_h_to_4h': block.mlp.dense_h_to_4h},
                     'prev_op': [block.input_layernorm],
