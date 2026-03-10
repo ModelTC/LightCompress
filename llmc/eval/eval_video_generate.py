@@ -23,6 +23,7 @@ class VideoGenerateEval(BaseEval):
         self.target_width = self.eval_cfg.get('target_width', 832)
         self.num_frames = self.eval_cfg.get('num_frames', 81)
         self.guidance_scale = self.eval_cfg.get('guidance_scale', 5.0)
+        self.guidance_scale_2 = self.eval_cfg.get('guidance_scale_2', None)
         self.fps = self.eval_cfg.get('fps', 15)
 
     @torch.no_grad()
@@ -56,14 +57,17 @@ class VideoGenerateEval(BaseEval):
         assert bs == 1, 'Only support eval bs=1'
 
         for i, data in enumerate(testenc):
-            output = model.Pipeline(
-                prompt=data['prompt'],
-                negative_prompt=data['negative_prompt'],
-                height=self.target_height,
-                width=self.target_width,
-                num_frames=self.num_frames,
-                guidance_scale=self.guidance_scale,
-            ).frames[0]
+            pipe_kw = {
+                'prompt': data['prompt'],
+                'negative_prompt': data['negative_prompt'],
+                'height': self.target_height,
+                'width': self.target_width,
+                'num_frames': self.num_frames,
+                'guidance_scale': self.guidance_scale,
+            }
+            if self.guidance_scale_2 is not None:
+                pipe_kw['guidance_scale_2'] = self.guidance_scale_2
+            output = model.Pipeline(**pipe_kw).frames[0]
             export_to_video(
                 output,
                 os.path.join(self.output_video_path, f'{eval_pos}_output_{i}.mp4'),
@@ -77,15 +81,18 @@ class VideoGenerateEval(BaseEval):
         for i, data in enumerate(testenc):
             image, width, height = self.pre_process(model, data['image'])
 
-            output = model.Pipeline(
-                image=image,
-                prompt=data['prompt'],
-                negative_prompt=data['negative_prompt'],
-                height=height,
-                width=width,
-                num_frames=self.num_frames,
-                guidance_scale=self.guidance_scale,
-            ).frames[0]
+            pipe_kw = {
+                'image': image,
+                'prompt': data['prompt'],
+                'negative_prompt': data['negative_prompt'],
+                'height': height,
+                'width': width,
+                'num_frames': self.num_frames,
+                'guidance_scale': self.guidance_scale,
+            }
+            if self.guidance_scale_2 is not None:
+                pipe_kw['guidance_scale_2'] = self.guidance_scale_2
+            output = model.Pipeline(**pipe_kw).frames[0]
 
             export_to_video(
                 output,
@@ -98,9 +105,9 @@ class VideoGenerateEval(BaseEval):
     @torch.no_grad()
     def eval_func(self, model, testenc, bs, eval_pos):
         assert bs == 1, 'Evaluation only supports batch size = 1.'
-        assert self.model_type in ['WanT2V', 'WanI2V'], (
+        assert self.model_type in ['WanT2V', 'WanI2V', 'Wan2T2V'], (
             f"Unsupported model type '{self.model_type}'.\n"
-            'Only Wan2.1 video generation models (WanT2V, WanI2V) are supported.'
+            'Only Wan video generation models (WanT2V, WanI2V, Wan2T2V) are supported.'
         )
         if self.eval_dataset_name == 't2v':
             return self.t2v_eval(model, testenc, bs, eval_pos)
