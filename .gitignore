@@ -22,3 +22,5 @@ save*
 .log
 *.pid
 *.ipynb*
+models/
+output_*HiFloat4/

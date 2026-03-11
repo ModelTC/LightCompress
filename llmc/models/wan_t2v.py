@@ -31,10 +31,13 @@ class WanT2V(BaseModel):
 
     def build_model(self):
         vae = AutoencoderKLWan.from_pretrained(
-            self.model_path, subfolder='vae', torch_dtype=torch.float32
+            self.model_path, subfolder='vae', torch_dtype=torch.float32, use_safetensors=True
         )
+        # self.Pipeline = WanPipeline.from_pretrained(
+        #     self.model_path, vae=vae, torch_dtype=torch.bfloat16
+        # )
         self.Pipeline = WanPipeline.from_pretrained(
-            self.model_path, vae=vae, torch_dtype=torch.bfloat16
+            self.model_path, vae=vae, torch_dtype=torch.bfloat16, use_safetensors=True
         )
         self.find_llmc_model()
         self.find_blocks()
