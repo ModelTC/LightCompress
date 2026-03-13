@@ -10,7 +10,7 @@ from .module_utils import FakeQuantLinear
 from .ntweak import NormTweaking
 from .omniq import OmniQuant
 from .osplus import OsPlus
-from .quant import FloatQuantizer, IntegerQuantizer
+from .quant import FloatQuantizer, HiFloat4Quantizer, IntegerQuantizer
 from .quarot import Quarot
 from .quik import QUIK
 from .rtn import RTN

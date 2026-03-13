@@ -1,18 +1,20 @@
 base:
     seed: &seed 42
 model:
-    type: WanT2V
-    path: /mnt/lm_data_afs/wangzining/charles/lab/llmc/models/Wan2.1-T2V-14B-Diffusers
+    type: Wan2T2V
+    path: /mnt/lm_data_afs/wangzining/charles/lab/llmc/models/Wan2.2-T2V-A14B-Diffusers
     torch_dtype: auto
+    # 显存不足时开启：校准阶段捕获的激活存到 CPU，量化时再按 block 搬到 GPU
+    use_cpu_to_save_cuda_mem_for_catcher: True
 calib:
     name: t2v
     download: False
     path: ./assets/wan_t2v/calib/
-    sample_steps: 20
+    sample_steps: 20   # OOM 时可减小，如 8 或 10
     bs: 1
-    target_height: 480
-    target_width: 832
-    num_frames: 81
+    target_height: 480 # OOM 时可减小，如 320
+    target_width: 832  # OOM 时可减小，如 576
+    num_frames: 81    # OOM 时可减小，如 49 或 33
     guidance_scale: 5.0
     seed: *seed
 eval:
@@ -31,11 +33,15 @@ quant:
     video_gen:
         method: Awq
         weight:
+            # quant_type: int-quant
+            quant_type: hif4
             bit: 4
             symmetric: True
             granularity: per_channel
             group_size: -1
         act:
+            # quant_type: int-qu
+            quant_type: hif4
             bit: 4
             symmetric: True
             granularity: per_token
@@ -46,4 +52,4 @@ quant:
             clip_sym: True
 save:
     save_lightx2v: True
-    save_path: ../lightx2v/wan_t2v_awq_w_a/x2v/
+    save_path: ../lightx2v/wan2_2_t2v_awq_w_a/x2v/
