@@ -1,3 +1,4 @@
+import gc
 import inspect
 from collections import defaultdict
 
@@ -53,14 +54,14 @@ class Wan2T2V(BaseModel):
             for block_idx, block in enumerate(self.Pipeline.transformer_2.blocks):
                 new_block = LlmcWanTransformerBlock.new(block)
                 self.Pipeline.transformer_2.blocks[block_idx] = new_block
-            self.blocks = list(self.Pipeline.transformer.blocks) + list(
-                self.Pipeline.transformer_2.blocks
-            )
+            self.num_transformer_blocks = len(self.Pipeline.transformer.blocks)
+            self.blocks = list(self.Pipeline.transformer.blocks) + list(self.Pipeline.transformer_2.blocks)
             logger.info(
                 'Wan2.2 MoE: both experts wrapped (high-noise + low-noise, 80 blocks total).'
             )
         else:
             self.blocks = list(self.Pipeline.transformer.blocks)
+            self.num_transformer_blocks = len(self.blocks)
             logger.info('Wan2.2: single transformer wrapped (40 blocks).')
         logger.info('Model: %s', self.model)
 
@@ -68,7 +69,25 @@ class Wan2T2V(BaseModel):
         self.model = self.Pipeline.transformer
 
     def find_blocks(self):
-        self.blocks = self.model.blocks
+        self.blocks = list(self.Pipeline.transformer.blocks)
+        self.num_transformer_blocks = len(self.blocks)
+        if hasattr(self.Pipeline, 'transformer_2') and self.Pipeline.transformer_2 is not None:
+            self.blocks += list(self.Pipeline.transformer_2.blocks)
+
+    def _expert_name_from_block_idx(self, block_idx):
+        if block_idx < self.num_transformer_blocks:
+            return 'transformer'
+        return 'transformer_2'
+
+    def get_blockwise_input(self, block_idx, fallback_input):
+        if not hasattr(self, 'blockwise_inputs'):
+            return fallback_input
+        return self.blockwise_inputs[self._expert_name_from_block_idx(block_idx)]
+
+    def set_blockwise_input(self, block_idx, block_input):
+        if not hasattr(self, 'blockwise_inputs'):
+            return
+        self.blockwise_inputs[self._expert_name_from_block_idx(block_idx)] = block_input
 
     def get_catcher(self, first_block_input):
         sample_steps = self.sample_steps
@@ -97,14 +116,52 @@ class Wan2T2V(BaseModel):
 
     @torch.no_grad()
     def collect_first_block_input(self, calib_data, padding_mask=None):
-        first_block_input = defaultdict(list)
-        Catcher = self.get_catcher(first_block_input)
-        # Install Catcher on the pipeline's first block so forward passes go through it.
+        first_block_input = {
+            'transformer': defaultdict(list),
+            'transformer_2': defaultdict(list),
+        }
+        sample_steps = self.sample_steps
+
+        class Catcher(nn.Module):
+            def __init__(self, module, expert_name):
+                super().__init__()
+                self.module = module
+                self.signature = inspect.signature(module.forward)
+                self.expert_name = expert_name
+
+            def _to_cpu(self, x):
+                if torch.is_tensor(x):
+                    return x.detach().cpu()
+                if isinstance(x, tuple):
+                    return tuple(self._to_cpu(t) for t in x)
+                return x
+
+            def forward(self, *args, **kwargs):
+                params = list(self.signature.parameters.keys())
+                for i, arg in enumerate(args):
+                    if i > 0:
+                        kwargs[params[i]] = arg
+                cur_num = len(first_block_input[self.expert_name]['data'])
+                if cur_num < sample_steps:
+                    first_block_input[self.expert_name]['data'].append(
+                        args[0].detach().cpu() if torch.is_tensor(args[0]) else args[0]
+                    )
+                    first_block_input[self.expert_name]['kwargs'].append(
+                        {k: self._to_cpu(v) for k, v in kwargs.items()}
+                    )
+                if all(len(first_block_input[name]['data']) >= sample_steps for name in first_block_input):
+                    raise ValueError
+                return self.module(*args)
+
         first_block = self.Pipeline.transformer.blocks[0]
-        self.Pipeline.transformer.blocks[0] = Catcher(first_block)
+        self.Pipeline.transformer.blocks[0] = Catcher(first_block, 'transformer')
+        first_block_2 = None
+        if hasattr(self.Pipeline, 'transformer_2') and self.Pipeline.transformer_2 is not None:
+            first_block_2 = self.Pipeline.transformer_2.blocks[0]
+            self.Pipeline.transformer_2.blocks[0] = Catcher(first_block_2, 'transformer_2')
+
         self.Pipeline.to('cuda')
         for data in calib_data:
-            self.Pipeline.transformer.blocks[0].step = 0
             try:
                 pipe_kw = {
                     'prompt': data['prompt'],
@@ -119,13 +176,27 @@ class Wan2T2V(BaseModel):
                 self.Pipeline(**pipe_kw)
             except ValueError:
                 pass
+            gc.collect()
+            torch.cuda.empty_cache()
 
-        self.first_block_input = first_block_input
-        assert len(self.first_block_input['data']) > 0, 'Catch input data failed.'
-        self.n_samples = len(self.first_block_input['data'])
-        logger.info('Retrieved %s calibration samples for Wan2.2 T2V.', self.n_samples)
         self.Pipeline.transformer.blocks[0] = self.Pipeline.transformer.blocks[0].module
+        if first_block_2 is not None:
+            self.Pipeline.transformer_2.blocks[0] = self.Pipeline.transformer_2.blocks[0].module
         self.Pipeline.to('cpu')
+
+        assert len(first_block_input['transformer']['data']) > 0, 'Catch transformer input data failed.'
+        if hasattr(self.Pipeline, 'transformer_2') and self.Pipeline.transformer_2 is not None:
+            assert len(first_block_input['transformer_2']['data']) > 0, \
+                'Catch transformer_2 input data failed.'
+
+        self.blockwise_inputs = first_block_input
+        self.first_block_input = self.blockwise_inputs['transformer']
+        self.n_samples = sum(len(v['data']) for v in self.blockwise_inputs.values())
+        logger.info(
+            'Retrieved Wan2.2 calibration samples: transformer=%s, transformer_2=%s.',
+            len(self.blockwise_inputs['transformer']['data']),
+            len(self.blockwise_inputs['transformer_2']['data']),
+        )
 
     def get_padding_mask(self):
         return None

@@ -31,11 +31,15 @@ class BlockwiseOpt(metaclass=ABCMeta):
     def run_block_loop(self):
         for i in range(len(self.blocks)):
             self.block_idx = i
+            if self.input and hasattr(self.model, 'get_blockwise_input'):
+                self.input = self.model.get_blockwise_input(self.block_idx, self.input)
             logger.info(
                 f'\nblock index: {self.block_idx}/{len(self.blocks)} '
                 f'\nblock: {self.blocks[self.block_idx]}'
             )
             self.block_opt(self.blocks[self.block_idx])
+            if self.input and hasattr(self.model, 'set_blockwise_input'):
+                self.model.set_blockwise_input(self.block_idx, self.input)
 
         if hasattr(self, 'save_scale') and self.save_scale:
             os.makedirs(self.scale_path, exist_ok=True)

@@ -23,4 +23,6 @@ save*
 *.pid
 *.ipynb*
 models/
-output_*HiFloat4/
+output_*
+HiFloat4/
+datasets/
