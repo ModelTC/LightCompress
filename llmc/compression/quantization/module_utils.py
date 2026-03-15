@@ -445,6 +445,13 @@ class LlmcQwen2RMSNorm(LlmcLlamaRMSNorm):
     def __repr__(self):
         return 'LlmcQwen2RMSNorm()'
 
+class LlmcIndustrialCoderRMSNorm(LlmcLlamaRMSNorm):
+    def __init__(self, weight, eps=1e-6):
+        super().__init__(weight, eps)
+
+    def __repr__(self):
+        return 'LlmcIndustrialCoderRMSNorm()'
+
 
 class LlmcMixtralRMSNorm(LlmcLlamaRMSNorm):
     def __init__(self, weight, eps=1e-6):
@@ -1187,6 +1194,7 @@ _MODEL_LN_TYPES_PAIRS_ = {
     'Mixtral': LlmcMixtralRMSNorm,
     'Interlm2': LlmcInternLM2RMSNorm,
     'Qwen2': LlmcQwen2RMSNorm,
+    'IndustrialCoder': LlmcIndustrialCoderRMSNorm,
     'Gemma2': LlmcGemma2RMSNorm,
     'MiniCPM': LlmcMiniCPMRMSNorm,
     'Starcoder': LlmcLayerNorm,

@@ -9,6 +9,7 @@ from .internlm2 import InternLM2
 from .internomni import InternOmni
 from .internvl2 import InternVL2
 from .internvl3_5 import InternVL3_5
+from .industrialcoder import IndustrialCoder
 from .llama import Llama
 from .llava import Llava
 from .llava_hf import LlavaHf
