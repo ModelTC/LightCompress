@@ -22,7 +22,7 @@ save*
 .log
 *.pid
 *.ipynb*
-models/
+model/
 output_*
 HiFloat4/
 datasets/
