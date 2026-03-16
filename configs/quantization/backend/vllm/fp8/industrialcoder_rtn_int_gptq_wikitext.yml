@@ -2,7 +2,7 @@ base:
     seed: &seed 42
 model:
     type: IndustrialCoder
-    path: models/IndustrialCoder-32B
+    path: model/IndustrialCoder-32B
     tokenizer_mode: slow
     torch_dtype: auto
     # Reduce peak memory in catcher stage for large models.

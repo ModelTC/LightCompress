@@ -899,7 +899,6 @@ class VllmRealQuantLinear(nn.Module):
             bias = None
 
         need_pack = quant_config['weight'].get('need_pack', False)
-
         if quant_config['weight']['granularity'] == 'per_block':
             scales_name = 'weight_scale_inv'
         else:

@@ -2,7 +2,7 @@ base:
     seed: &seed 42
 model:
     type: IndustrialCoder
-    path: models/IndustrialCoder-32B
+    path: model/IndustrialCoder-32B
     tokenizer_mode: slow
     torch_dtype: auto
     # Reduce peak memory in catcher stage for large models.
@@ -21,14 +21,12 @@ quant:
         bit: e4m3
         symmetric: True
         granularity: per_channel
-        block_size: 128
         use_qtorch: True
     act:
         quant_type: float-quant
         bit: e4m3
         symmetric: True
         granularity: per_token
-        block_size: 128
         use_qtorch: True
 save:
     save_vllm: True

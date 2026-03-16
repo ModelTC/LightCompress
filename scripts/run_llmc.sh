@@ -8,7 +8,7 @@ model_name=wan2_2_t2v
 task_name=awq_w_a
 # task_name=awq_w_a_s
 log_name=${model_name}_${task_name}
-rm -rf ../lightx2v/${log_name}/x2v/lightx2v_quant_model
+rm -rf ./save_for_lightx2v/${model_name}/${task_name}/original
 llmc=.
 export PYTHONPATH=$llmc:$PYTHONPATH
 config=${llmc}/configs/quantization/video_gen/${model_name}/${task_name}.yaml

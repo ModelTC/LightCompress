@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 model_name=industrialcoder
-method_name=rtn_int_gptq
+method_name=rtn_fp8
 dataset_name=wikitext
 
 log_name=${model_name}_${method_name}_${dataset_name}

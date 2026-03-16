@@ -31,7 +31,8 @@ def update_vllm_quant_config(
             with open(config_file, 'w') as file:
                 json.dump(config_vllm, file, indent=4)
             return
-        elif config.quant.weight.get('granularity', 'per_block'):
+        # elif config.quant.weight.get('granularity', 'per_block'):
+        elif config.quant.weight.get('granularity') == 'per_block':
             quant_config = {
                 'activation_scheme': 'dynamic',
                 'fmt': 'e4m3',
