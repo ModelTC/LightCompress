@@ -2,7 +2,7 @@ base:
     seed: &seed 42
 model:
     type: Wan2T2V
-    path: /mnt/lm_data_afs/wangzining/charles/lab/llmc/models/Wan2.2-T2V-A14B-Diffusers
+    path: /mnt/lm_data_afs/wangzining/charles/lab/llmc/model/Wan2.2-T2V-A14B-Diffusers
     torch_dtype: auto
     # 显存不足时开启：校准阶段捕获的激活存到 CPU，量化时再按 block 搬到 GPU
     use_cpu_to_save_cuda_mem_for_catcher: True
@@ -40,7 +40,7 @@ quant:
             granularity: per_channel
             group_size: -1
         act:
-            # quant_type: int-qu
+            # quant_type: int-quant
             quant_type: hif4
             bit: 4
             symmetric: True
@@ -51,5 +51,7 @@ quant:
             weight_clip: True
             clip_sym: True
 save:
-    save_lightx2v: True
-    save_path: ../lightx2v/wan2_2_t2v_awq_w_a/x2v/
+    # save_lightx2v: True
+    # save_path: ./save_for_lightx2v/wan2_2_t2v/awq_w_a/original/
+    save_fake: True
+    save_path: ./save_for_fake/wan2_2_t2v/awq_w_a/original/
