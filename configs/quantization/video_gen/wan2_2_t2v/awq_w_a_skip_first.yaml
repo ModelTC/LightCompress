@@ -1,0 +1,64 @@
+base:
+    seed: &seed 42
+model:
+    type: Wan2T2V
+    path: /mnt/lm_data_afs/wangzining/charles/lab/llmc/model/Wan2.2-T2V-A14B-Diffusers
+    torch_dtype: auto
+    # 显存不足时开启：校准阶段捕获的激活存到 CPU，量化时再按 block 搬到 GPU
+    use_cpu_to_save_cuda_mem_for_catcher: True
+calib:
+    name: t2v
+    download: False
+    path: ./assets/wan_t2v/calib/
+    sample_steps: 20   # OOM 时可减小，如 8 或 10
+    bs: 1
+    target_height: 480 # OOM 时可减小，如 320
+    target_width: 832  # OOM 时可减小，如 576
+    num_frames: 81    # OOM 时可减小，如 49 或 33
+    guidance_scale: 5.0
+    seed: *seed
+eval:
+    eval_pos: [transformed, fake_quant]
+    type: video_gen
+    name: t2v
+    download: False
+    path: ./assets/wan_t2v/calib/
+    bs: 1
+    target_height: 480
+    target_width: 832
+    num_frames: 81
+    guidance_scale: 5.0
+    output_video_path: ./output_videos_awq_skip_first/
+quant:
+    video_gen:
+        method: Awq
+        weight:
+            # quant_type: int-quant
+            quant_type: hif4
+            bit: 4
+            symmetric: True
+            granularity: per_channel
+            group_size: -1
+        act:
+            # quant_type: int-quant
+            quant_type: hif4
+            bit: 4
+            symmetric: True
+            granularity: per_token
+        special:
+            trans: True
+            trans_version: v2
+            weight_clip: True
+            clip_sym: True
+# Skip AWQ transformation and fake-quant deployment for:
+#   block 0  → transformer expert (high-noise), first block
+#   block 40 → transformer_2 expert (low-noise), first block
+# (transformer has 40 blocks, so transformer_2 starts at index 40)
+# Leaving layer_names empty means ALL linear layers in those blocks are skipped.
+ignored_layers:
+    block_ids: [0, 40]
+save:
+    # save_lightx2v: True
+    # save_path: ./save_for_lightx2v/wan2_2_t2v/awq_w_a/skip_first/
+    save_fake: True
+    save_path: ./save_for_fake/wan2_2_t2v/awq_w_a/skip_first/

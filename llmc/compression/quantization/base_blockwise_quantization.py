@@ -459,9 +459,21 @@ class BaseBlockwiseQuantization(BlockwiseOpt):
                 h.remove()
             torch.cuda.empty_cache()
 
-            self.block_transform(block, input_feat, self.input['kwargs'])
+            if not self._is_ignored_block(self.block_idx):
+                self.block_transform(block, input_feat, self.input['kwargs'])
+            else:
+                logger.info(
+                    f'Block {self.block_idx} is in ignored_block_ids, '
+                    f'skipping block_transform.'
+                )
         else:
-            self.block_transform(block)
+            if not self._is_ignored_block(self.block_idx):
+                self.block_transform(block)
+            else:
+                logger.info(
+                    f'Block {self.block_idx} is in ignored_block_ids, '
+                    f'skipping block_transform.'
+                )
 
         if not self.data_free and self.quant_out:
             self.model.replace_module_block(
@@ -922,27 +934,45 @@ class BaseBlockwiseQuantization(BlockwiseOpt):
             if getattr(m, 'calib', None) is not None:
                 m.calib = mode
 
+    def _get_ignored_block_ids_set(self):
+        if not hasattr(self, '_ignored_block_ids_set_cache'):
+            expanded = []
+            for item in self.ignored_block_ids:
+                match = re.match(r'(\d+)-(\d+)', str(item))
+                if match:
+                    start, end = int(match.group(1)), int(match.group(2))
+                    expanded.extend(range(start, end + 1))
+                else:
+                    expanded.append(int(item))
+            self._ignored_block_ids_set_cache = set(expanded)
+        return self._ignored_block_ids_set_cache
+
+    def _is_ignored_block(self, block_idx):
+        if not self.mixed_precision or not self.ignored_block_ids:
+            return False
+        return block_idx in self._get_ignored_block_ids_set()
+
     def set_no_quant_layer(self):
         if self.ignored_speical_names:
             assert hasattr(self.model, 'block_name_prefix'), \
                 'block_name_prefix missing in model'
-        ignored_block_ids = []
-        for item in self.ignored_block_ids:
-            match = re.match(r'(\d+)-(\d+)', str(item))
-            if match:
-                start, end = int(match.group(1)), int(match.group(2))
-                ignored_block_ids.extend(range(start, end + 1))
-            else:
-                ignored_block_ids.append(int(item))
+        ignored_block_ids = self._get_ignored_block_ids_set()
+        # If no layer_names specified, skip all linear layers in the ignored blocks
+        skip_all_linears = not self.ignored_layer_names
 
         for idx, block in enumerate(self.blocks):
             for n, m in block.named_modules():
-                if idx in ignored_block_ids and n in self.ignored_layer_names:
-                    m.register_buffer('no_quant', torch.tensor(True))
-                else:
-                    layer_name = f'{self.model.block_name_prefix}.{idx}.{n}'
-                    if layer_name in self.ignored_speical_names:
+                if idx in ignored_block_ids:
+                    if skip_all_linears:
+                        if isinstance(m, tuple(_LLMC_LINEAR_TYPES_ + _TRANSFORMERS_LINEAR_TYPES_)):
+                            m.register_buffer('no_quant', torch.tensor(True))
+                    elif n in self.ignored_layer_names:
                         m.register_buffer('no_quant', torch.tensor(True))
+                else:
+                    if self.ignored_speical_names:
+                        layer_name = f'{self.model.block_name_prefix}.{idx}.{n}'
+                        if layer_name in self.ignored_speical_names:
+                            m.register_buffer('no_quant', torch.tensor(True))
 
     @torch.no_grad()
     def deploy(self, quant_format, keep_device=False):
