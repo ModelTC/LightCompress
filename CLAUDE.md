@@ -1,0 +1,6 @@
+我需要给wan2.2(https://huggingface.co/Wan-AI/Wan2.2-Animate-14B-Diffusers)进行hifp4的模拟量化，使用的方法是AWQ，但是目前生成的权重有一些问题
+我的两个推测一是代码存在real quant和fake quant的糅合导致结果错误，二是模型本身没有完全保存（只保存了transfomer部分）
+请参考配置文件configs/quantization/video_gen/wan2_2_t2v/awq_w_a.yaml和和运行脚本scripts/run_llmc.sh，帮我解决这个问题
+请注意，我现在的电脑是本地主机而不是服务器，所以需要你从代码本身的逻辑去寻找错误而不能真的运行
+可以参考int4的real quant和llmc中本身的fake quant配置寻找原因
+你有权限修改本文件夹下所有文件

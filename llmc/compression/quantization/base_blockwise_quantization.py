@@ -4,6 +4,7 @@ import gc
 import json
 import os
 import re
+import shutil
 from collections import defaultdict
 from functools import partial
 
@@ -1017,6 +1018,18 @@ class BaseBlockwiseQuantization(BlockwiseOpt):
                 if not param.is_contiguous():
                     param.data = param.data.contiguous()
 
+            if (
+                self.config.model.type in ['Wan2T2V']
+                and hasattr(self.model.Pipeline, 'transformer_2')
+                and self.model.Pipeline.transformer_2 is not None
+            ):
+                for name, param in self.model.Pipeline.transformer_2.named_parameters():
+                    if not param.is_contiguous():
+                        param.data = param.data.contiguous()
+                for name, param in self.model.Pipeline.transformer_2.named_buffers():
+                    if not param.is_contiguous():
+                        param.data = param.data.contiguous()
+
     @torch.no_grad()
     def save_model(self, path):
         if int(os.environ['RANK']) != 0:
@@ -1037,6 +1050,28 @@ class BaseBlockwiseQuantization(BlockwiseOpt):
             self.model.avlm_model.save_pretrained(path)
             logger.info('save model done --')
             self.copy_tokenizer(path)
+        elif self.config.model.type in ['Wan2T2V']:
+            # Copy the full original pipeline (VAE, text encoder, tokenizer, scheduler, etc.)
+            # so that non-quantized components are preserved.
+            src = self.model.model_path
+            if os.path.abspath(src) != os.path.abspath(path):
+                if os.path.exists(path):
+                    shutil.rmtree(path)
+                shutil.copytree(src, path)
+                logger.info(f'Copied original pipeline from {src} to {path}')
+            # Overwrite transformer subfolder with quantized weights.
+            self.model.Pipeline.transformer.save_pretrained(
+                os.path.join(path, 'transformer')
+            )
+            logger.info('save Wan2.2 transformer done --')
+            if (
+                hasattr(self.model.Pipeline, 'transformer_2')
+                and self.model.Pipeline.transformer_2 is not None
+            ):
+                self.model.Pipeline.transformer_2.save_pretrained(
+                    os.path.join(path, 'transformer_2')
+                )
+                logger.info('save Wan2.2 transformer_2 done --')
         else:
             self.model.get_model().save_pretrained(path)
             logger.info('save model done --')
