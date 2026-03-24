@@ -2,7 +2,9 @@ base:
     seed: &seed 42
 model:
     type: Wan2T2V
-    path: /mnt/lm_data_afs/wangzining/charles/lab/llmc/model/Wan2.2-T2V-A14B-Diffusers
+    path: /mnt/lm_data_afs/wangzining/charles/lab/llmc/model/Wan2.2-T2V-A14B
+    # 若未 `pip install -e /path/to/Wan2.2`，可显式指定官方仓库代码路径：
+    # wan2_repo_path: /path/to/Wan2.2
     torch_dtype: auto
     # 显存不足时开启：校准阶段捕获的激活存到 CPU，量化时再按 block 搬到 GPU
     use_cpu_to_save_cuda_mem_for_catcher: True
