@@ -3,12 +3,18 @@ export PYTHON=/mnt/lm_data_afs/wangzining/charles/miniconda3/envs/llmc/bin/pytho
 export PIP=/mnt/lm_data_afs/wangzining/charles/miniconda3/envs/llmc/bin/pip
 export HF_ENDPOINT=https://hf-mirror.com
 cd /mnt/lm_data_afs/wangzining/charles/lab/llmc
+# hif4 kernel
+cd HiFloat4/hif4_gpu/
+bash build.sh
+cd -
+
 # model_name=wan_t2v
 model_name=wan2_2_t2v
-task_name=awq_w_a
+task_name=awq_w_a_skip_first
 # task_name=awq_w_a_s
 log_name=${model_name}_${task_name}
-rm -rf ../lightx2v/${log_name}/x2v/lightx2v_quant_model
+rm -rf ./save_for_fake/${model_name}/awq_w_a/skip_first
+
 llmc=.
 export PYTHONPATH=$llmc:$PYTHONPATH
 config=${llmc}/configs/quantization/video_gen/${model_name}/${task_name}.yaml
@@ -28,7 +34,6 @@ UNUSED_PORT=$(find_unused_port)
 MASTER_ADDR=127.0.0.1
 MASTER_PORT=$UNUSED_PORT
 task_id=$UNUSED_PORT
-
 
 torchrun \
 --nnodes $nnodes \
