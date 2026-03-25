@@ -1060,6 +1060,58 @@ class BaseBlockwiseQuantization(BlockwiseOpt):
                     if not param.is_contiguous():
                         param.data = param.data.contiguous()
 
+    def _copy_wan22_native_checkpoint(self, src, dst):
+        if not isinstance(src, str) or not os.path.isdir(src):
+            raise RuntimeError(
+                'Wan2.2 official save expects a local native checkpoint directory, '
+                f'but got src={src!r}.'
+            )
+        if os.path.abspath(src) == os.path.abspath(dst):
+            raise RuntimeError(
+                'Wan2.2 official save path must differ from source checkpoint path '
+                f'(src=dst={src}).'
+            )
+        if os.path.exists(dst):
+            shutil.rmtree(dst)
+        shutil.copytree(src, dst)
+        logger.info(f'Copied original Wan2.2 native checkpoint from {src} to {dst}')
+
+    def _validate_wan22_native_save_structure(self, save_path, source_path=None):
+        if not os.path.isdir(save_path):
+            raise RuntimeError(f'Wan2.2 saved path is not a directory: {save_path}')
+
+        required_entries = ['configuration.json', 'high_noise_model', 'low_noise_model']
+        missing_required = [
+            name for name in required_entries
+            if not os.path.exists(os.path.join(save_path, name))
+        ]
+        if missing_required:
+            raise RuntimeError(
+                'Wan2.2 saved structure is incomplete. Missing required entries: '
+                f'{missing_required}. save_path={save_path}'
+            )
+
+        if isinstance(source_path, str) and os.path.isdir(source_path):
+            source_entries = set(os.listdir(source_path))
+            source_non_expert_entries = sorted(
+                name for name in source_entries
+                if name not in {'high_noise_model', 'low_noise_model'}
+            )
+            missing_non_expert = [
+                name for name in source_non_expert_entries
+                if not os.path.exists(os.path.join(save_path, name))
+            ]
+            if missing_non_expert:
+                raise RuntimeError(
+                    'Wan2.2 saved structure lost original non-expert files/directories: '
+                    f'{missing_non_expert}. source_path={source_path}, save_path={save_path}'
+                )
+
+        logger.info(
+            f'Wan2.2 native save structure verified. '
+            f'top-level entries={sorted(os.listdir(save_path))}'
+        )
+
     @torch.no_grad()
     def save_model(self, path):
         if int(os.environ['RANK']) != 0:
@@ -1082,16 +1134,8 @@ class BaseBlockwiseQuantization(BlockwiseOpt):
             self.copy_tokenizer(path)
         elif self.config.model.type in ['Wan2T2V']:
             if getattr(self.model.Pipeline, '_is_wan_official', False):
-                src = self.model.model_path
-                copied_from_source = False
-                if isinstance(src, str) and os.path.isdir(src) and os.path.abspath(src) != os.path.abspath(path):
-                    if os.path.exists(path):
-                        shutil.rmtree(path)
-                    shutil.copytree(src, path)
-                    logger.info(f'Copied original Wan2.2 native checkpoint from {src} to {path}')
-                    copied_from_source = True
-                if not copied_from_source and os.path.exists(path):
-                    shutil.rmtree(path)
+                src = getattr(self.model, 'pipeline_model_path', self.model.model_path)
+                self._copy_wan22_native_checkpoint(src, path)
 
                 self.model.Pipeline.transformer.save_pretrained(
                     os.path.join(path, 'high_noise_model')
@@ -1105,6 +1149,7 @@ class BaseBlockwiseQuantization(BlockwiseOpt):
                         os.path.join(path, 'low_noise_model')
                     )
                     logger.info('save Wan2.2 low_noise_model done --')
+                self._validate_wan22_native_save_structure(path, source_path=src)
                 return
 
             # Copy the full original pipeline (VAE, text encoder, tokenizer, scheduler, etc.)

@@ -5,6 +5,9 @@ model:
     path: /mnt/lm_data_afs/wangzining/charles/lab/llmc/model/Wan2.2-T2V-A14B
     # 若未 `pip install -e /path/to/Wan2.2`，可显式指定官方仓库代码路径：
     # wan2_repo_path: /path/to/Wan2.2
+    # 默认严格走官方 Wan2.2 原生后端；官方代码不可用时会直接报错，不再静默回退到 Diffusers。
+    # 若确实需要回退可开启：
+    # allow_diffusers_fallback: True
     torch_dtype: auto
     # 显存不足时开启：校准阶段捕获的激活存到 CPU，量化时再按 block 搬到 GPU
     use_cpu_to_save_cuda_mem_for_catcher: True
@@ -17,7 +20,9 @@ calib:
     target_height: 480 # OOM 时可减小，如 320
     target_width: 832  # OOM 时可减小，如 576
     num_frames: 81    # OOM 时可减小，如 49 或 33
-    guidance_scale: 5.0
+    # 对齐官方 Wan2.2 默认 sample_guide_scale=(3.0, 4.0) (low_noise, high_noise)
+    guidance_scale: 4.0      # high_noise
+    guidance_scale_2: 3.0    # low_noise
     seed: *seed
 eval:
     eval_pos: [transformed, fake_quant]
@@ -29,7 +34,9 @@ eval:
     target_height: 480
     target_width: 832
     num_frames: 81
-    guidance_scale: 5.0
+    # 对齐官方 Wan2.2 默认 sample_guide_scale=(3.0, 4.0) (low_noise, high_noise)
+    guidance_scale: 4.0      # high_noise
+    guidance_scale_2: 3.0    # low_noise
     output_video_path: ./output_videos_awq_skip_first/
 quant:
     video_gen:

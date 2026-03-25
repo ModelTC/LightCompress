@@ -163,6 +163,24 @@ class Wan2T2V(BaseModel):
             and os.path.isdir(os.path.join(model_path, 'low_noise_model'))
         )
 
+    @staticmethod
+    def _is_wan22_native_repo_id(model_path):
+        if not isinstance(model_path, str):
+            return False
+        return model_path.rstrip('/\\') == 'Wan-AI/Wan2.2-T2V-A14B'
+
+    def _should_require_official_backend(self, normalized_model_path):
+        if self.config.model.get('force_diffusers', False):
+            return False
+        if self.config.model.get('diffusers_path', None):
+            return False
+        if self.config.model.get('allow_diffusers_fallback', False):
+            return False
+        return (
+            self._has_wan22_native_layout(normalized_model_path)
+            or self._is_wan22_native_repo_id(normalized_model_path)
+        )
+
     def _import_official_wan(self):
         def _import_impl():
             from wan.configs import t2v_A14B
@@ -185,7 +203,8 @@ class Wan2T2V(BaseModel):
                     )
             logger.warning(
                 'Failed to import official Wan2.2 runtime (wan package). '
-                f'Falling back to diffusers import path. import_error={e}'
+                'Diffusers fallback depends on model.allow_diffusers_fallback/model.force_diffusers. '
+                f'import_error={e}'
             )
             return None, None
 
@@ -286,6 +305,9 @@ class Wan2T2V(BaseModel):
 
     def build_model(self):
         self.use_official_wan = False
+        normalized_model_path = self._normalize_hf_repo_path(self.model_path)
+        require_official_backend = self._should_require_official_backend(normalized_model_path)
+
         if self._try_build_official_wan_pipeline():
             self.find_llmc_model()
             self.find_blocks()
@@ -301,6 +323,16 @@ class Wan2T2V(BaseModel):
             )
             logger.info('Model: %s', self.model)
             return
+
+        if require_official_backend:
+            raise RuntimeError(
+                'Detected Wan2.2 native source '
+                f'({normalized_model_path}) but official Wan runtime is unavailable. '
+                'Please install/prepare official Wan2.2 code (pip install -e /path/to/Wan2.2 '
+                'or set model.wan2_repo_path). '
+                'If you intentionally want Diffusers fallback, set '
+                'model.allow_diffusers_fallback=True or model.force_diffusers=True.'
+            )
 
         self.pipeline_model_path = self._resolve_pipeline_model_path()
         vae = AutoencoderKLWan.from_pretrained(
