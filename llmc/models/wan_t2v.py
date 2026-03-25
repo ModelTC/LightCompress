@@ -64,16 +64,17 @@ class WanT2V(BaseModel):
 
             def forward(self, *args, **kwargs):
                 params = list(self.signature.parameters.keys())
+                capture_kwargs = dict(kwargs)
                 for i, arg in enumerate(args):
                     if i > 0:
-                        kwargs[params[i]] = arg
+                        capture_kwargs[params[i]] = arg
                 first_block_input['data'].append(args[0])
-                first_block_input['kwargs'].append(kwargs)
+                first_block_input['kwargs'].append(capture_kwargs)
                 self.step += 1
                 if self.step == sample_steps:
                     raise ValueError
                 else:
-                    return self.module(*args)
+                    return self.module(*args, **kwargs)
 
         return Catcher
 

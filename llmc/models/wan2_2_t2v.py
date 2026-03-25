@@ -405,16 +405,17 @@ class Wan2T2V(BaseModel):
 
             def forward(self, *args, **kwargs):
                 params = list(self.signature.parameters.keys())
+                capture_kwargs = dict(kwargs)
                 for i, arg in enumerate(args):
                     if i > 0:
-                        kwargs[params[i]] = arg
+                        capture_kwargs[params[i]] = arg
                 first_block_input['data'].append(args[0])
-                first_block_input['kwargs'].append(kwargs)
+                first_block_input['kwargs'].append(capture_kwargs)
                 self.step += 1
                 if self.step == sample_steps:
                     raise ValueError
                 else:
-                    return self.module(*args)
+                    return self.module(*args, **kwargs)
 
         return Catcher
 
@@ -442,20 +443,21 @@ class Wan2T2V(BaseModel):
 
             def forward(self, *args, **kwargs):
                 params = list(self.signature.parameters.keys())
+                capture_kwargs = dict(kwargs)
                 for i, arg in enumerate(args):
                     if i > 0:
-                        kwargs[params[i]] = arg
+                        capture_kwargs[params[i]] = arg
                 cur_num = len(first_block_input[self.expert_name]['data'])
                 if cur_num < sample_steps:
                     first_block_input[self.expert_name]['data'].append(
                         args[0].detach().cpu() if torch.is_tensor(args[0]) else args[0]
                     )
                     first_block_input[self.expert_name]['kwargs'].append(
-                        {k: self._to_cpu(v) for k, v in kwargs.items()}
+                        {k: self._to_cpu(v) for k, v in capture_kwargs.items()}
                     )
                 if all(len(first_block_input[name]['data']) >= sample_steps for name in first_block_input):
                     raise ValueError
-                return self.module(*args)
+                return self.module(*args, **kwargs)
 
         first_block = self.Pipeline.transformer.blocks[0]
         self.Pipeline.transformer.blocks[0] = Catcher(first_block, 'transformer')
