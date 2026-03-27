@@ -26,20 +26,27 @@ from llmc.utils.registry_factory import ALGO_REGISTRY, MODEL_REGISTRY
 
 
 def main(config):
+    # 从注册表拿模型并实例化
+    # 动态分配模型
     model = MODEL_REGISTRY[config.model.type](config)
 
+    # 打印模型和tokenizer
     logger.info(f'model: {model}')
     logger.info(f'tokenizer: {model.get_tokenizer()}')
 
+    # 获得需要的评测种类
     eval_list = get_eval_list(model, config)
+    # 真正执行评测
     eval_model(model, None, eval_list, eval_pos='pretrain')
 
     blockwise_opts = []
+    # 取出处理模态
     modalities, modality_configs = get_modality(config)
 
     for modality, modality_config in zip(modalities, modality_configs):
         model.set_modality(modality)
         if not config.get('calib', False):
+            # 不需要校准数据 直接构造算法对象
             blockwise_opt = ALGO_REGISTRY[modality_config.method](
                 model,
                 modality_config,
@@ -51,14 +58,17 @@ def main(config):
             blockwise_opts.append(blockwise_opt)
             dist.barrier()
         else:
+            # 需要校准数据
             dataset = BaseDataset(
                 model.get_tokenizer(), config.calib, model.batch_process
             )
             calib_data, padding_mask = dataset.get_calib_dataset()
+            # 收集第一层block输入 为后续blockwise算法需要的输入缓存下来
             model.collect_first_block_input(calib_data, padding_mask)
             del calib_data
             gc.collect()
             torch.cuda.empty_cache()
+            # 构造算法对象
             blockwise_opt = ALGO_REGISTRY[modality_config.method](
                 model,
                 modality_config,
@@ -66,15 +76,20 @@ def main(config):
                 model.get_padding_mask(),
                 config,
             )
+            # 项目逐层block做优化
             blockwise_opt.run_block_loop()
             blockwise_opts.append(blockwise_opt)
             dist.barrier()
 
+    # 对变化后的浮点模型做评测
     eval_model(model, blockwise_opts, eval_list, eval_pos='transformed')
+    # 只有rank 0继续做保存和导出
     if int(os.environ['RANK']) == 0:
+        # 保存变换后的浮点模型
         if 'save' in config and config.save.get('save_trans', False):
             blockwise_opt.save_model(save_trans_path)
 
+        # 保存TensorRT-LLM格式并构建engine
         if 'save' in config and config.save.get('save_trtllm', False):
             blockwise_opt.save_model(save_trtllm_trans_path)
             from llmc.utils.export_trtllm import cvt_trtllm_engine
@@ -88,12 +103,15 @@ def main(config):
         eval_model(model, blockwise_opts, eval_list, eval_pos='fake_quant')
         eval_model(model, blockwise_opts, eval_list, eval_pos='fake_quant_wo_kv')
 
+        # 切换到fake quant部署模式再保存
         if 'save' in config and config.save.get('save_fake', False):
             deploy_all_modality(blockwise_opts, 'fake_quant')
             blockwise_opt.save_model(save_fake_path)
 
         if 'save' in config:
+            # 导出真实量化模型给推理后端
             if (
+                # 导出前进行遍历检查
                 config.save.get('save_vllm', False)
                 or config.save.get('save_sgl', False)
                 or config.save.get('save_lightllm', False)
@@ -101,9 +119,12 @@ def main(config):
                 for modality_config in modality_configs:
                     w, a = modality_config.weight, modality_config.get('act')
 
+                    # 只允许特定bit类型
                     if isinstance(w.bit, str):
+                        # 必须对称量化
                         assert w.symmetric, 'Only symmetric quant is supported.'
                         assert w.bit in ['e4m3', 'e3m4'], 'Supported quant: w8a16.'
+                        # 有激活量化的话，那激活也要满足对称、bit合法的要求
                         if a:
                             assert (
                                 w.symmetric and a.symmetric
@@ -114,6 +135,7 @@ def main(config):
                                 and a.bit in ['e4m3', 'e5m2']
                             ), 'Only WA FP8 quant is supported'
                     else:
+                        # 是整数则必须是4 or 8
                         assert w.symmetric, 'Only symmetric quant is supported.'
                         assert w.bit in [4, 8], 'Supported quant: w4a16, w8a16, w8a8.'
                         if a:
@@ -130,12 +152,15 @@ def main(config):
                 blockwise_opt.save_model(save_quant_path)
                 update_vllm_quant_config(blockwise_opt.model, config, save_quant_path)
 
+            # 给特定后端（AutoAWQ导出
             elif config.save.get('save_autoawq', False):
                 for modality_config in modality_configs:
+                    # 只能4 bit 仅含有weight 不支持act
                     assert (
                         modality_config.weight.bit in [4] and 'act' not in modality_config
                     ), 'AutoAWQ supports only 4-bit weight-only quantization.'
                     assert (
+                    # 不能对称量化
                         not modality_config.weight.symmetric
                     ), 'Only asymmetric quant is supported.'
 
@@ -161,11 +186,15 @@ def main(config):
                 blockwise_opt.save_model(save_quant_path)
                 update_lightx2v_quant_config(save_quant_path)
 
+        # 判断是否有opencompass
         if 'opencompass' in config:
             assert config.save.get('save_trans', False)
+            # 从配置里读取cfg_path, output_path
             cfg_path = config['opencompass']['cfg_path']
             output_path = config['opencompass']['output_path']
+            # 取路径
             eval_model_path = os.path.abspath(save_trans_path)
+            # 拼指令
             opencompass_cmd = (
                 f'opencompass {cfg_path} -w {output_path} '
                 f'--llmc_cfg {args.config} '
@@ -173,6 +202,7 @@ def main(config):
                 f'--llmc_model_path {eval_model_path}'
             )
             logger.info(f'opencompass_cmd : {opencompass_cmd}')
+            # 执行
             os.system(opencompass_cmd)
     dist.barrier()
 
@@ -181,20 +211,25 @@ if __name__ == '__main__':
     logger.add(sys.stdout, level='INFO')
     llmc_start_time = time.time()
     parser = argparse.ArgumentParser()
+    # 解析命令行参数
     parser.add_argument('--config', type=str, required=True)
     parser.add_argument('--task_id', type=str, required=True)
     args = parser.parse_args()
 
     with open(args.config, 'r') as file:
+        # 读取配置文件
         config = yaml.safe_load(file)
     config = EasyDict(config)
 
     init_process_group(backend='nccl')
+    # 初始化分布式环境 设置GPU
     torch.cuda.set_device(int(os.environ['LOCAL_RANK']))
 
+    # 检查配置 打印依赖版本
     if int(os.environ['RANK']) != 0:
         logger.remove()
 
+    # 检查配置是否合法
     check_config(config)
 
     logger.info(f'args: {args}')
@@ -266,3 +301,4 @@ if __name__ == '__main__':
     llmc_duration_time = llmc_end_time - llmc_start_time
     logger.info(f'llmc_duration_time: {llmc_duration_time} s')
     logger.info('--- llmc finished ---')
+    
