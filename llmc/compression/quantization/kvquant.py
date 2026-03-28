@@ -13,9 +13,9 @@ class NaiveQuantKVCache(DynamicCache):
     def __init__(self, quant_type, kvquant_cfg, num_hidden_layers, num_samples=128, bsz=1):
         super().__init__()
 
-        # 复制一份配置，避免在静态 KV 校准场景下修改原始量化配置对象。
+        # Copy the config to avoid mutating the original quantization config in static KV calibration.
         kvquant_cfg = copy.deepcopy(kvquant_cfg)
-        assert kvquant_cfg.granularity in ['per_token', 'per_tensor', 'per_group']
+        assert kvquant_cfg.granularity in ['per_token', 'per_tensor', 'per_group', 'per_head']
         self.num_hidden_layers, self.num_samples, self.bsz = (
             num_hidden_layers,
             num_samples,
@@ -24,8 +24,8 @@ class NaiveQuantKVCache(DynamicCache):
         if kvquant_cfg.get('static', False) and kvquant_cfg.get(
             'calib_algo', 'minmax'
         ) == 'minmax':
-            # 静态 KV 校准会走批量张量统计接口，这里把默认的 minmax
-            # 归一化成对应的 static_minmax，避免后续校准时报算法名不匹配。
+            # Static KV calibration uses the batched tensor statistics path, so convert the default
+            # minmax setting to static_minmax here to avoid a later calibration algo name mismatch.
             kvquant_cfg['calib_algo'] = 'static_minmax'
         if quant_type == 'int-quant':
             self.kvquantizer = IntegerQuantizer(**kvquant_cfg)
