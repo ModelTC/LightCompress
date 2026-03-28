@@ -181,8 +181,9 @@ class BaseBlockwiseQuantization(BlockwiseOpt):
                 assert (
                     self.quant_config['act']['granularity'] == 'per_tensor'
                 ), 'Only support per_tensor static quant'
-                # 静态激活量化会走批量校准接口，这里把默认的 minmax
-                # 归一化成对应的 static_minmax，避免后续校准时报算法名不匹配。
+                # Static activation quantization uses the batched calibration
+                # path, so normalize the default minmax setting to
+                # static_minmax to match the downstream calibration logic.
                 if self.quant_config['act'].get('calib_algo', 'minmax') == 'minmax':
                     self.quant_config['act']['calib_algo'] = 'static_minmax'
             self.quant_config['act']['tp'] = self.tp
@@ -208,8 +209,8 @@ class BaseBlockwiseQuantization(BlockwiseOpt):
             kv_special_cfg = self.quant_config['kvcache'].get('special', {})
             act_static_cfg = {}
             if self.act_static:
-                # KV cache 构造函数接收的是 num_samples / bsz，
-                # 这里把校准配置里的字段名映射成它实际需要的参数名。
+                # The KV cache constructor expects num_samples / bsz, so map
+                # the calibration config fields to the parameter names it uses.
                 act_static_cfg['num_samples'] = self.config.calib.n_samples
                 act_static_cfg['bsz'] = self.config.calib.bs
             kv_quant_type = self.quant_config['kvcache'].get('quant_type', 'int-quant')
@@ -1010,20 +1011,23 @@ class BaseBlockwiseQuantization(BlockwiseOpt):
                 if not param.is_contiguous():
                     param.data = param.data.contiguous()
 
-    # 将张量等对象转换成 JSON 可直接写出的 Python 基础类型。
+    # Convert tensors and similar objects into Python values that can be
+    # directly serialized into JSON.
     def _to_jsonable(self, value):
         if isinstance(value, torch.Tensor):
             return value.detach().cpu().tolist()
         return value
 
-    # 统一把输入规整成 CPU tensor，便于后续做范围计算和序列化。
+    # Normalize inputs into CPU tensors so the following range computation
+    # and serialization logic can handle them consistently.
     def _to_tensor(self, value, dtype=torch.float32):
         if isinstance(value, torch.Tensor):
             return value.detach().cpu().to(dtype)
         return torch.as_tensor(value, dtype=dtype)
 
-    # LightLLM 需要的是离线 FP8 KV 的 descale，这里先根据 qparams 还原实数范围，
-    # 再换算成与 torch.float8_e4m3fn 对齐的每层 K/V scale。
+    # LightLLM expects offline FP8 KV descales. Recover the real-value range
+    # from the qparams first, then convert it into per-layer K/V scales that
+    # align with torch.float8_e4m3fn.
     def _collect_lightllm_kv_scale(self, scales, zeros, qmin, qmax):
         if isinstance(scales, torch.Tensor) and scales.numel() == 0:
             return None
@@ -1040,8 +1044,9 @@ class BaseBlockwiseQuantization(BlockwiseOpt):
         )
         return absmax_tensor / fp8_qmax
 
-    # 按 LightLLM 的 kv_cache_calib.json 结构导出校准结果，
-    # 目前只支持它已经接入的 per_tensor / per_head 两种 KV 格式。
+    # Export calibration results in the LightLLM kv_cache_calib.json format.
+    # At the moment, only the per_tensor and per_head KV formats supported by
+    # LightLLM are handled here.
     def collect_calib_json(self):
         return collect_lightllm_kv_calib_json(self)
 
