@@ -8,7 +8,6 @@ calib:
     name: pileval
     download: False
     path: /home/michael/Project/calib/pileval
-    n_sample: 128
     n_samples: 128
     bs: 1
     seq_len: 2048

@@ -209,7 +209,7 @@ class BaseBlockwiseQuantization(BlockwiseOpt):
             if self.act_static:
                 # KV cache 构造函数接收的是 num_samples / bsz，
                 # 这里把校准配置里的字段名映射成它实际需要的参数名。
-                act_static_cfg['num_samples'] = self.config.calib.n_sample
+                act_static_cfg['num_samples'] = self.config.calib.n_samples
                 act_static_cfg['bsz'] = self.config.calib.bs
             kv_quant_type = self.quant_config['kvcache'].get('quant_type', 'int-quant')
             self.kv_module = KV_REGISTRY[self.quant_config['kvcache']['method']](
