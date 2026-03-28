@@ -1,0 +1,48 @@
+base:
+    seed: &seed 42
+model:
+    type: model_type
+    path: model path
+    torch_dtype: auto
+calib:
+    name: pileval
+    download: False
+    path: calib data path
+    n_samples: 128
+    bs: 1
+    seq_len: 2048
+    preproc: txt_general_preproc
+    seed: *seed
+eval:
+    eval_pos: [transformed, fake_quant, fake_quant_wo_kv] #long_ppl eval not support pretrain eval pos
+    name: wikitext2
+    type: decode_ppl
+    download: False
+    path: eval_data_path
+    bs: 1
+    inference_per_block: False
+    num_samples: 10
+    # num_eval_tokens: 3
+quant:
+    method: RTN
+    weight:
+        bit: 8
+        symmetric: True
+        granularity: per_channel
+        group_size: -1
+    act:
+        bit: 8
+        symmetric: True
+        granularity: per_tensor
+        static: True
+    kvcache:
+        method: Naive
+        bit: 8
+        symmetric: True
+        granularity: per_head
+        head_num: kv head num
+save:
+    save_lightllm_kv_calib: True
+    lightllm_kv_cache_name: kv_cache_calib.json
+    save_fake: False
+    save_path: /path/to/save/
