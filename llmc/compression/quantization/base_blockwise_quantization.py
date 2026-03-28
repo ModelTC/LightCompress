@@ -175,13 +175,17 @@ class BaseBlockwiseQuantization(BlockwiseOpt):
                     self.act_quant_module = IntegerQuantizer
             elif quant_type == 'float-quant':
                 self.act_quant_module = FloatQuantizer
-            self.quant_config['act']['tp'] = self.tp
-            self.aquantizer = self.act_quant_module(**self.quant_config['act'])
             self.act_static = self.quant_config['act'].get('static', False)
             if self.act_static:
                 assert (
                     self.quant_config['act']['granularity'] == 'per_tensor'
                 ), 'Only support per_tensor static quant'
+                # 静态激活量化会走批量校准接口，这里把默认的 minmax
+                # 归一化成对应的 static_minmax，避免后续校准时报算法名不匹配。
+                if self.quant_config['act'].get('calib_algo', 'minmax') == 'minmax':
+                    self.quant_config['act']['calib_algo'] = 'static_minmax'
+            self.quant_config['act']['tp'] = self.tp
+            self.aquantizer = self.act_quant_module(**self.quant_config['act'])
             self.quant_attn = self.quant_config['act'].get('quant_attn', False)
             if self.quant_attn:
                 assert self.config['model']['type'] in ['Vit', 'DeepseekV2']
@@ -203,8 +207,10 @@ class BaseBlockwiseQuantization(BlockwiseOpt):
             kv_special_cfg = self.quant_config['kvcache'].get('special', {})
             act_static_cfg = {}
             if self.act_static:
-                act_static_cfg['n_sample'] = self.config.calib.n_sample
-                act_static_cfg['bs'] = self.config.calib.bs
+                # KV cache 构造函数接收的是 num_samples / bsz，
+                # 这里把校准配置里的字段名映射成它实际需要的参数名。
+                act_static_cfg['num_samples'] = self.config.calib.n_sample
+                act_static_cfg['bsz'] = self.config.calib.bs
             kv_quant_type = self.quant_config['kvcache'].get('quant_type', 'int-quant')
             self.kv_module = KV_REGISTRY[self.quant_config['kvcache']['method']](
                 kv_quant_type, self.quant_config['kvcache'],
@@ -1002,6 +1008,111 @@ class BaseBlockwiseQuantization(BlockwiseOpt):
             for name, param in self.model.model.named_buffers():
                 if not param.is_contiguous():
                     param.data = param.data.contiguous()
+
+    # 将张量等对象转换成 JSON 可直接写出的 Python 基础类型。
+    def _to_jsonable(self, value):
+        if isinstance(value, torch.Tensor):
+            return value.detach().cpu().tolist()
+        return value
+
+    # 统一把输入规整成 CPU tensor，便于后续做范围计算和序列化。
+    def _to_tensor(self, value, dtype=torch.float32):
+        if isinstance(value, torch.Tensor):
+            return value.detach().cpu().to(dtype)
+        return torch.as_tensor(value, dtype=dtype)
+
+    # LightLLM 需要的是离线 FP8 KV 的 descale，这里先根据 qparams 还原实数范围，
+    # 再换算成与 torch.float8_e4m3fn 对齐的每层 K/V scale。
+    def _collect_lightllm_kv_scale(self, scales, zeros, qmin, qmax):
+        if isinstance(scales, torch.Tensor) and scales.numel() == 0:
+            return None
+
+        scales_tensor = self._to_tensor(scales)
+        zeros_tensor = self._to_tensor(zeros, dtype=scales_tensor.dtype)
+        qmin_tensor = self._to_tensor(qmin, dtype=scales_tensor.dtype)
+        qmax_tensor = self._to_tensor(qmax, dtype=scales_tensor.dtype)
+        min_tensor = (qmin_tensor - zeros_tensor) * scales_tensor
+        max_tensor = (qmax_tensor - zeros_tensor) * scales_tensor
+        absmax_tensor = torch.maximum(min_tensor.abs(), max_tensor.abs())
+        fp8_qmax = torch.tensor(
+            torch.finfo(torch.float8_e4m3fn).max, dtype=absmax_tensor.dtype
+        )
+        return absmax_tensor / fp8_qmax
+
+    # 按 LightLLM 的 kv_cache_calib.json 结构导出校准结果，
+    # 目前只支持它已经接入的 per_tensor / per_head 两种 KV 格式。
+    def collect_calib_json(self):
+        if not getattr(self, 'quant_kvcache', False):
+            raise ValueError('save_calib_json requires kvcache quantization.')
+
+        kv_cfg = self.quant_config['kvcache']
+        granularity = kv_cfg.get('granularity')
+        # LightLLM 当前只识别 per_tensor 和 per_head 两种静态 KV 校准文件。
+        if granularity not in ['per_tensor', 'per_head']:
+            raise ValueError(
+                f'LightLLM calib export only supports per_tensor/per_head, got {granularity}'
+            )
+
+        num_layers = self.model.model_config.num_hidden_layers
+        # LightLLM 会校验 KV head 数；如果模型配置里没有这个字段，再退回总 head 数。
+        num_head = int(
+            getattr(
+                self.model.model_config,
+                'num_key_value_heads',
+                self.model.get_num_attention_heads(),
+            )
+        )
+        scales = []
+        # 每层导出一行，顺序固定为 [k_scale..., v_scale...]。
+        for layer_idx in range(num_layers):
+            key_scale = self._collect_lightllm_kv_scale(
+                self.kv_module.k_scales_buffer[layer_idx],
+                self.kv_module.k_zeros_buffer[layer_idx],
+                self.kv_module.k_qmin_buffer[layer_idx],
+                self.kv_module.k_qmax_buffer[layer_idx],
+            )
+            value_scale = self._collect_lightllm_kv_scale(
+                self.kv_module.v_scales_buffer[layer_idx],
+                self.kv_module.v_zeros_buffer[layer_idx],
+                self.kv_module.v_qmin_buffer[layer_idx],
+                self.kv_module.v_qmax_buffer[layer_idx],
+            )
+            if key_scale is None or value_scale is None:
+                raise ValueError(f'Calibration scale for layer {layer_idx} is empty.')
+
+            scale_row = torch.cat([key_scale.reshape(-1), value_scale.reshape(-1)]).tolist()
+            scales.append(scale_row)
+
+        scale_width = len(scales[0]) if scales else 0
+        # per_tensor 每层只能有 [k_scale, v_scale] 两个值；
+        # per_head 则需要每层 2 * num_head 个值。
+        if granularity == 'per_tensor' and scale_width != 2:
+            raise ValueError(f'per_tensor export expects 2 scales per layer, got {scale_width}')
+        if granularity == 'per_head' and scale_width != num_head * 2:
+            raise ValueError(
+                f'per_head export expects {num_head * 2} scales per layer, got {scale_width}'
+            )
+
+        # 优先复用 Hugging Face config 里的 architectures 字段，
+        # 缺失时退回到 LLMC 配置里的模型类型，便于 LightLLM 做架构一致性校验。
+        architectures = getattr(self.model.model_config, 'architectures', None)
+        if isinstance(architectures, list) and len(architectures) > 0:
+            architectures = architectures[0]
+        elif architectures is None:
+            architectures = self.config.model.type
+
+        # 顶层字段名称和含义对齐 LightLLM PR #1220 中的 kv_cache_calib.json。
+        return {
+            'version': '1.0',
+            'architectures': architectures,
+            'quant_type': granularity,
+            'qmin': float(torch.finfo(torch.float8_e4m3fn).min),
+            'qmax': float(torch.finfo(torch.float8_e4m3fn).max),
+            'num_layers': num_layers,
+            'num_head': num_head,
+            'scales_shape': [num_layers, scale_width],
+            'scales': scales,
+        }
 
     @torch.no_grad()
     def save_model(self, path):

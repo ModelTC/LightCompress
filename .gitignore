@@ -23,3 +23,4 @@ save*
 *.pid
 *.ipynb*
 .venv/
+*.sh

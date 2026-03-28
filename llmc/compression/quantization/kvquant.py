@@ -1,3 +1,4 @@
+import copy
 import torch
 from loguru import logger
 from transformers import DynamicCache
@@ -12,12 +13,20 @@ class NaiveQuantKVCache(DynamicCache):
     def __init__(self, quant_type, kvquant_cfg, num_hidden_layers, num_samples=128, bsz=1):
         super().__init__()
 
+        # 复制一份配置，避免在静态 KV 校准场景下修改原始量化配置对象。
+        kvquant_cfg = copy.deepcopy(kvquant_cfg)
         assert kvquant_cfg.granularity in ['per_token', 'per_tensor', 'per_group']
         self.num_hidden_layers, self.num_samples, self.bsz = (
             num_hidden_layers,
             num_samples,
             bsz,
         )
+        if kvquant_cfg.get('static', False) and kvquant_cfg.get(
+            'calib_algo', 'minmax'
+        ) == 'minmax':
+            # 静态 KV 校准会走批量张量统计接口，这里把默认的 minmax
+            # 归一化成对应的 static_minmax，避免后续校准时报算法名不匹配。
+            kvquant_cfg['calib_algo'] = 'static_minmax'
         if quant_type == 'int-quant':
             self.kvquantizer = IntegerQuantizer(**kvquant_cfg)
         elif quant_type == 'float-quant':

@@ -1,24 +1,25 @@
 base:
     seed: &seed 42
 model:
-    type: model_type
-    path: model path
+    type: Qwen3
+    path: /home/michael/Project/models/Qwen3-0.6B
     torch_dtype: auto
 calib:
     name: pileval
     download: False
-    path: calib data path
+    path: /home/michael/Project/calib/pileval
+    n_sample: 128
     n_samples: 128
     bs: 1
     seq_len: 2048
     preproc: txt_general_preproc
     seed: *seed
 eval:
-    eval_pos: [transformed, fake_quant, fake_quant_wo_kv] #long_ppl eval not support pretrain eval pos
+    eval_pos: [] #long_ppl eval not support pretrain eval pos
     name: wikitext2
     type: decode_ppl
     download: False
-    path: eval_data_path
+    path: /home/michael/Project/llmc_datasets/wikitext2
     bs: 1
     inference_per_block: False
     num_samples: 10
@@ -41,5 +42,7 @@ quant:
         symmetric: True
         granularity: per_tensor
 save:
+    save_calib_json: True
+    calib_json_name: kv_cache_calib.json
     save_fake: False
-    save_path: /path/to/save/
+    save_path: /home/michael/Project/llmc_save
