@@ -30,7 +30,7 @@ class ShortGPT(BaseBlockwiseSparsification):
         self.input['data'] = output_feat
 
     def block_transform(self, input_feat, output_feat):
-        logger.info(f'Start transform the {self.block_idx+1}-th block')
+        logger.info(f'Start transform the {self.block_idx + 1}-th block')
         self.subset_transform(
             input_feat,
             output_feat
