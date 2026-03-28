@@ -203,8 +203,8 @@ class BaseBlockwiseQuantization(BlockwiseOpt):
             kv_special_cfg = self.quant_config['kvcache'].get('special', {})
             act_static_cfg = {}
             if self.act_static:
-                act_static_cfg.update(self.config.calib.n_sample)
-                act_static_cfg.update(self.config.calib.bs)
+                act_static_cfg['n_sample'] = self.config.calib.n_sample
+                act_static_cfg['bs'] = self.config.calib.bs
             kv_quant_type = self.quant_config['kvcache'].get('quant_type', 'int-quant')
             self.kv_module = KV_REGISTRY[self.quant_config['kvcache']['method']](
                 kv_quant_type, self.quant_config['kvcache'],
