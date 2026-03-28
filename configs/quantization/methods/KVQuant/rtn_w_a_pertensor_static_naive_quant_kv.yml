@@ -41,7 +41,7 @@ quant:
         symmetric: True
         granularity: per_tensor
 save:
-    save_calib_json: True
-    calib_json_name: kv_cache_calib.json
+    save_lightllm_kv_cache_calib: True
+    lightllm_kv_cache_calib_name: kv_cache_calib.json
     save_fake: False
     save_path: /home/michael/Project/llmc_save

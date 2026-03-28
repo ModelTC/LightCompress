@@ -85,7 +85,7 @@ def main(config):
     eval_model(model, blockwise_opts, eval_list, eval_pos='transformed')
     # 只有rank 0继续做保存和导出
     if int(os.environ['RANK']) == 0:
-        if 'save' in config and config.save.get('save_calib_json', False):
+        if 'save' in config and config.save.get('save_lightllm_kv_cache_calib', False):
             # 收集各个模态/量化器导出的校准结果。
             calib_json_list = [
                 blockwise_opt.collect_calib_json()
@@ -97,9 +97,11 @@ def main(config):
                 calib_json_list[0] if len(calib_json_list) == 1 else calib_json_list
             )
             # 将最终的校准 JSON 写入配置指定的输出路径。
-            with open(save_calib_json_path, 'w') as file:
+            with open(save_lightllm_kv_cache_calib_path, 'w') as file:
                 json.dump(calib_json_payload, file, ensure_ascii=False, indent=4)
-            logger.info(f'save calib json done -- {save_calib_json_path}')
+            logger.info(
+                f'save lightllm kv cache calib done -- {save_lightllm_kv_cache_calib_path}'
+            )
 
         # 保存变换后的浮点模型
         if 'save' in config and config.save.get('save_trans', False):
@@ -260,11 +262,13 @@ if __name__ == '__main__':
     # Ensure only the main process creates directories
     if int(os.environ['RANK']) == 0:
         if 'save' in config:
-            if config.save.get('save_calib_json', False):
+            if config.save.get('save_lightllm_kv_cache_calib', False):
                 mkdirs(config.save.save_path)
-                save_calib_json_path = os.path.join(
+                save_lightllm_kv_cache_calib_path = os.path.join(
                     config.save.save_path,
-                    config.save.get('calib_json_name', 'calib_scales.json'),
+                    config.save.get(
+                        'lightllm_kv_cache_calib_name', 'kv_cache_calib.json'
+                    ),
                 )
             if config.save.get('save_trans', False):
                 save_trans_path = os.path.join(

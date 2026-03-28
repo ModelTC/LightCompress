@@ -3,7 +3,9 @@ import torch
 
 def collect_lightllm_kv_calib_json(blockwise_opt):
     if not getattr(blockwise_opt, 'quant_kvcache', False):
-        raise ValueError('save_calib_json requires kvcache quantization.')
+        raise ValueError(
+            'save_lightllm_kv_cache_calib requires kvcache quantization.'
+        )
 
     kv_cfg = blockwise_opt.quant_config['kvcache']
     granularity = kv_cfg.get('granularity')
