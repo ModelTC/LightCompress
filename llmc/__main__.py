@@ -20,6 +20,7 @@ from llmc.eval.utils import eval_model, get_eval_list
 from llmc.models import *
 from llmc.utils import (check_config, deploy_all_modality, get_modality,
                         mkdirs, print_important_package_version, seed_all,
+                        collect_lightllm_kv_calib_json,
                         update_autoawq_quant_config,
                         update_lightx2v_quant_config, update_vllm_quant_config)
 from llmc.utils.registry_factory import ALGO_REGISTRY, MODEL_REGISTRY
@@ -74,9 +75,9 @@ def main(config):
     if int(os.environ['RANK']) == 0:
         if 'save' in config and config.save.get('save_lightllm_kv_cache_calib', False):
             calib_json_list = [
-                blockwise_opt.collect_calib_json()
+                collect_lightllm_kv_calib_json(blockwise_opt)
                 for blockwise_opt in blockwise_opts
-                if hasattr(blockwise_opt, 'collect_calib_json')
+                if hasattr(blockwise_opt, 'quant_kvcache')
             ]
             calib_json_payload = (
                 calib_json_list[0] if len(calib_json_list) == 1 else calib_json_list

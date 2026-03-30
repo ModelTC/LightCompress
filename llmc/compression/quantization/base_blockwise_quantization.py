@@ -1,7 +1,6 @@
 import copy
 import functools
 import gc
-import json
 import os
 import re
 from collections import defaultdict
@@ -12,7 +11,6 @@ import torch.distributed as dist
 import torch.nn as nn
 from loguru import logger
 
-from llmc.utils.export_calib import collect_lightllm_kv_calib_json
 from llmc.utils.registry_factory import KV_REGISTRY, TOKEN_REDUCTION_REGISTRY
 
 from ..blockwise_optimization import BlockwiseOpt
@@ -1010,45 +1008,6 @@ class BaseBlockwiseQuantization(BlockwiseOpt):
             for name, param in self.model.model.named_buffers():
                 if not param.is_contiguous():
                     param.data = param.data.contiguous()
-
-    # Convert tensors and similar objects into Python values that can be
-    # directly serialized into JSON.
-    def _to_jsonable(self, value):
-        if isinstance(value, torch.Tensor):
-            return value.detach().cpu().tolist()
-        return value
-
-    # Normalize inputs into CPU tensors so the following range computation
-    # and serialization logic can handle them consistently.
-    def _to_tensor(self, value, dtype=torch.float32):
-        if isinstance(value, torch.Tensor):
-            return value.detach().cpu().to(dtype)
-        return torch.as_tensor(value, dtype=dtype)
-
-    # LightLLM expects offline FP8 KV descales. Recover the real-value range
-    # from the qparams first, then convert it into per-layer K/V scales that
-    # align with torch.float8_e4m3fn.
-    def _collect_lightllm_kv_scale(self, scales, zeros, qmin, qmax):
-        if isinstance(scales, torch.Tensor) and scales.numel() == 0:
-            return None
-
-        scales_tensor = self._to_tensor(scales)
-        zeros_tensor = self._to_tensor(zeros, dtype=scales_tensor.dtype)
-        qmin_tensor = self._to_tensor(qmin, dtype=scales_tensor.dtype)
-        qmax_tensor = self._to_tensor(qmax, dtype=scales_tensor.dtype)
-        min_tensor = (qmin_tensor - zeros_tensor) * scales_tensor
-        max_tensor = (qmax_tensor - zeros_tensor) * scales_tensor
-        absmax_tensor = torch.maximum(min_tensor.abs(), max_tensor.abs())
-        fp8_qmax = torch.tensor(
-            torch.finfo(torch.float8_e4m3fn).max, dtype=absmax_tensor.dtype
-        )
-        return absmax_tensor / fp8_qmax
-
-    # Export calibration results in the LightLLM kv_cache_calib.json format.
-    # At the moment, only the per_tensor and per_head KV formats supported by
-    # LightLLM are handled here.
-    def collect_calib_json(self):
-        return collect_lightllm_kv_calib_json(self)
 
     @torch.no_grad()
     def save_model(self, path):
