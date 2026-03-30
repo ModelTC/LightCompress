@@ -22,3 +22,5 @@ save*
 .log
 *.pid
 *.ipynb*
+.venv/
+*.sh

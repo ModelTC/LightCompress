@@ -20,6 +20,7 @@ from llmc.eval.utils import eval_model, get_eval_list
 from llmc.models import *
 from llmc.utils import (check_config, deploy_all_modality, get_modality,
                         mkdirs, print_important_package_version, seed_all,
+                        collect_lightllm_kv_calib_json,
                         update_autoawq_quant_config,
                         update_lightx2v_quant_config, update_vllm_quant_config)
 from llmc.utils.registry_factory import ALGO_REGISTRY, MODEL_REGISTRY
@@ -72,6 +73,21 @@ def main(config):
 
     eval_model(model, blockwise_opts, eval_list, eval_pos='transformed')
     if int(os.environ['RANK']) == 0:
+        if 'save' in config and config.save.get('save_lightllm_kv_cache_calib', False):
+            calib_json_list = [
+                collect_lightllm_kv_calib_json(blockwise_opt)
+                for blockwise_opt in blockwise_opts
+                if hasattr(blockwise_opt, 'quant_kvcache')
+            ]
+            calib_json_payload = (
+                calib_json_list[0] if len(calib_json_list) == 1 else calib_json_list
+            )
+            with open(save_lightllm_kv_cache_calib_path, 'w') as file:
+                json.dump(calib_json_payload, file, ensure_ascii=False, indent=4)
+            logger.info(
+                f'save lightllm kv cache calib done -- {save_lightllm_kv_cache_calib_path}'
+            )
+
         if 'save' in config and config.save.get('save_trans', False):
             blockwise_opt.save_model(save_trans_path)
 
@@ -209,6 +225,14 @@ if __name__ == '__main__':
     # Ensure only the main process creates directories
     if int(os.environ['RANK']) == 0:
         if 'save' in config:
+            if config.save.get('save_lightllm_kv_cache_calib', False):
+                mkdirs(config.save.save_path)
+                save_lightllm_kv_cache_calib_path = os.path.join(
+                    config.save.save_path,
+                    config.save.get(
+                        'lightllm_kv_cache_calib_name', 'kv_cache_calib.json'
+                    ),
+                )
             if config.save.get('save_trans', False):
                 save_trans_path = os.path.join(
                     config.save.save_path, 'transformed_model'
@@ -266,3 +290,4 @@ if __name__ == '__main__':
     llmc_duration_time = llmc_end_time - llmc_start_time
     logger.info(f'llmc_duration_time: {llmc_duration_time} s')
     logger.info('--- llmc finished ---')
+    

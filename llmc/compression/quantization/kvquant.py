@@ -1,3 +1,4 @@
+import copy
 import torch
 from loguru import logger
 from transformers import DynamicCache
@@ -12,12 +13,20 @@ class NaiveQuantKVCache(DynamicCache):
     def __init__(self, quant_type, kvquant_cfg, num_hidden_layers, num_samples=128, bsz=1):
         super().__init__()
 
-        assert kvquant_cfg.granularity in ['per_token', 'per_tensor', 'per_group']
+        # Copy the config to avoid mutating the original quantization config in static KV calibration.
+        kvquant_cfg = copy.deepcopy(kvquant_cfg)
+        assert kvquant_cfg.granularity in ['per_token', 'per_tensor', 'per_group', 'per_head']
         self.num_hidden_layers, self.num_samples, self.bsz = (
             num_hidden_layers,
             num_samples,
             bsz,
         )
+        if kvquant_cfg.get('static', False) and kvquant_cfg.get(
+            'calib_algo', 'minmax'
+        ) == 'minmax':
+            # Static KV calibration uses the batched tensor statistics path, so convert the default
+            # minmax setting to static_minmax here to avoid a later calibration algo name mismatch.
+            kvquant_cfg['calib_algo'] = 'static_minmax'
         if quant_type == 'int-quant':
             self.kvquantizer = IntegerQuantizer(**kvquant_cfg)
         elif quant_type == 'float-quant':
