@@ -1,0 +1,43 @@
+base:
+    seed: &seed 42
+model:
+    type: IndustrialCoder
+    path: /mnt/lm_data_afs/wangzining/charles/industrial_thinking/IndustrialCoder-Thinking
+    tokenizer_mode: slow
+    torch_dtype: auto
+    
+    use_cpu_to_save_cuda_mem_for_catcher: False 
+calib:
+    name: wikitext2  
+    download: True
+    # path: /mnt/lm_data_afs/wangzining/charles/datasets/wikitext2  
+    n_samples: 128
+    bs: 1           
+    seq_len: 512
+    preproc: txt_general_preproc
+    seed: *seed
+eval:
+    eval_pos: [fake_quant]
+    name: wikitext2
+    download: True
+    # path: /mnt/lm_data_afs/wangzining/charles/datasets/wikitext2  
+    seq_len: 2048
+    bs: 1
+    inference_per_block: False
+quant:
+    method: Awq
+    weight:
+        bit: 4
+        symmetric: True
+        granularity: per_group
+        group_size: 128
+        need_pack: True
+    special:
+        trans: True
+        trans_version: v2
+        weight_clip: True
+    quant_out: True
+save:
+    save_vllm: True
+  
+    save_path: /mnt/lm_data_afs/wangzining/charles/lab/llmc/save_for_vllm/thinking_awq_w4/
