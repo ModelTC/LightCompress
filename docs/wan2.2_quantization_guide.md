@@ -43,8 +43,6 @@ quant:
             clip_sym: True
 ```
 
-首次使用需编译仓库内 hif4 GPU 扩展：`HiFloat4/hif4_gpu/build.sh`。
-
 ## 运行步骤
 
 ### 1. 环境
@@ -129,7 +127,6 @@ torchrun \
 
 - **OOM**：减小 `sample_steps`、`num_frames`、分辨率；`bs: 1`；可开 `use_cpu_to_save_cuda_mem_for_catcher`。  
 - **无法 `import wan`**：安装官方仓库或配置 `wan2_repo_path`。  
-- **hif4 扩展编译失败**：核对 CUDA / PyTorch 与 `HiFloat4/hif4_gpu/build.sh` 日志。  
 - **画质下降**：增加/多样化校准 prompt；在支持范围内微调 `special` 与校准规模。  
 
 ## 参考

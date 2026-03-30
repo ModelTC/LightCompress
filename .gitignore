@@ -24,5 +24,4 @@ save*
 *.ipynb*
 model/
 output_*
-HiFloat4/
 datasets/
