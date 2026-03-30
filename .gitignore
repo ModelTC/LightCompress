@@ -25,3 +25,5 @@ save*
 model/
 output_*
 datasets/
+.venv/
+*.sh

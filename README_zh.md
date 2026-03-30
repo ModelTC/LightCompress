@@ -31,6 +31,8 @@ docker pull registry.cn-hangzhou.aliyuncs.com/yongyang/llmcompression:pure-lates
 
 **文档**： [English](https://llmc-en.readthedocs.io/en/latest/)、[中文](https://llmc-zhcn.readthedocs.io/en/latest/)。
 
+> **推荐 Python 版本**：建议本地开发和安装使用 **Python 3.11**。这与项目的 Docker 镜像和 CI 配置保持一致，并且对当前依赖集合而言通常比 Python 3.12 更稳定。
+
 ## :fire: 最新动态
 
 - **2025年8月13日:** 🚀 我们已开源针对 **视觉语言模型（VLMs）** 的压缩方案，支持共计超过 **20 种算法**，涵盖 **token reduction** 和 **quantization**。此次发布为多模态任务提供了灵活、即插即用的压缩策略。具体请参阅[文档](https://llmc-zhcn.readthedocs.io/en/latest/advanced/token_reduction.html)。

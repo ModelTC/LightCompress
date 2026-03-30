@@ -48,6 +48,18 @@ def c4_gptq(calib_dataset, tokenizer, n_samples, seq_len):
 
 
 @PREPROC_REGISTRY
+def pile_gptq(calib_dataset, tokenizer, n_samples, seq_len):
+    trainenc = tokenizer('\n\n'.join(calib_dataset['text'][:1000]), return_tensors='pt')
+    samples = []
+    for _ in range(n_samples):
+        i = random.randint(0, trainenc.input_ids.shape[1] - seq_len - 1)
+        j = i + seq_len
+        inp = trainenc.input_ids[:, i:j]
+        samples.append(inp)
+    return samples
+
+
+@PREPROC_REGISTRY
 def pileval_awq(calib_dataset, tokenizer, n_samples, seq_len):
     dataset = calib_dataset.shuffle(seed=42)
     samples = []

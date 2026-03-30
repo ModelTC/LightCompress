@@ -1,7 +1,6 @@
 import copy
 import functools
 import gc
-import json
 import os
 import re
 import shutil
@@ -180,18 +179,18 @@ class BaseBlockwiseQuantization(BlockwiseOpt):
                     self.act_quant_module = IntegerQuantizer
             elif quant_type == 'float-quant':
                 self.act_quant_module = FloatQuantizer
-            else:
-                raise ValueError(
-                    f"Unsupported act quant_type: {quant_type}. "
-                    "Supported: int-quant, float-quant, hif4."
-                )
-            self.quant_config['act']['tp'] = self.tp
-            self.aquantizer = self.act_quant_module(**self.quant_config['act'])
             self.act_static = self.quant_config['act'].get('static', False)
             if self.act_static:
                 assert (
                     self.quant_config['act']['granularity'] == 'per_tensor'
                 ), 'Only support per_tensor static quant'
+                # Static activation quantization uses the batched calibration
+                # path, so normalize the default minmax setting to
+                # static_minmax to match the downstream calibration logic.
+                if self.quant_config['act'].get('calib_algo', 'minmax') == 'minmax':
+                    self.quant_config['act']['calib_algo'] = 'static_minmax'
+            self.quant_config['act']['tp'] = self.tp
+            self.aquantizer = self.act_quant_module(**self.quant_config['act'])
             self.quant_attn = self.quant_config['act'].get('quant_attn', False)
             if self.quant_attn:
                 assert self.config['model']['type'] in ['Vit', 'DeepseekV2']
@@ -213,8 +212,10 @@ class BaseBlockwiseQuantization(BlockwiseOpt):
             kv_special_cfg = self.quant_config['kvcache'].get('special', {})
             act_static_cfg = {}
             if self.act_static:
-                act_static_cfg.update(self.config.calib.n_sample)
-                act_static_cfg.update(self.config.calib.bs)
+                # The KV cache constructor expects num_samples / bsz, so map
+                # the calibration config fields to the parameter names it uses.
+                act_static_cfg['num_samples'] = self.config.calib.n_samples
+                act_static_cfg['bsz'] = self.config.calib.bs
             kv_quant_type = self.quant_config['kvcache'].get('quant_type', 'int-quant')
             self.kv_module = KV_REGISTRY[self.quant_config['kvcache']['method']](
                 kv_quant_type, self.quant_config['kvcache'],
