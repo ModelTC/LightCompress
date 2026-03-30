@@ -2,7 +2,7 @@ base:
     seed: &seed 42
 model:
     type: WanI2V
-    path: /mnt/lm_data_afs/wangzining/charles/lab/llmc/models/Wan2.2-T2V-A14B/
+    path: /path/to/model
     torch_dtype: auto
 calib:
     name: i2v
@@ -31,12 +31,12 @@ quant:
     video_gen:
         method: Awq
         weight:
-            bit: 4
+            bit: 8
             symmetric: True
             granularity: per_channel
             group_size: -1
         act:
-            bit: 4
+            bit: 8
             symmetric: True
             granularity: per_token
         special:
@@ -46,4 +46,4 @@ quant:
             clip_sym: True
 save:
     save_lightx2v: True
-    save_path: ../lightx2v/wan_i2v_awq_w_a/x2v/
+    save_path: /path/to/x2v/

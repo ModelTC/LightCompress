@@ -32,7 +32,7 @@ def main(config):
     logger.info(f'tokenizer: {model.get_tokenizer()}')
 
     eval_list = get_eval_list(model, config)
-    # eval_model(model, None, eval_list, eval_pos='pretrain')
+    eval_model(model, None, eval_list, eval_pos='pretrain')
 
     blockwise_opts = []
     modalities, modality_configs = get_modality(config)
@@ -70,7 +70,7 @@ def main(config):
             blockwise_opts.append(blockwise_opt)
             dist.barrier()
 
-    # eval_model(model, blockwise_opts, eval_list, eval_pos='transformed')
+    eval_model(model, blockwise_opts, eval_list, eval_pos='transformed')
     if int(os.environ['RANK']) == 0:
         if 'save' in config and config.save.get('save_trans', False):
             blockwise_opt.save_model(save_trans_path)
@@ -85,8 +85,8 @@ def main(config):
                 config.save.get('trtllm_cfg'),
             )
 
-        # eval_model(model, blockwise_opts, eval_list, eval_pos='fake_quant')
-        # eval_model(model, blockwise_opts, eval_list, eval_pos='fake_quant_wo_kv')
+        eval_model(model, blockwise_opts, eval_list, eval_pos='fake_quant')
+        eval_model(model, blockwise_opts, eval_list, eval_pos='fake_quant_wo_kv')
 
         if 'save' in config and config.save.get('save_fake', False):
             deploy_all_modality(blockwise_opts, 'fake_quant')
