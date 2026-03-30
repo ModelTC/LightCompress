@@ -31,13 +31,10 @@ class WanT2V(BaseModel):
 
     def build_model(self):
         vae = AutoencoderKLWan.from_pretrained(
-            self.model_path, subfolder='vae', torch_dtype=torch.float32, use_safetensors=True
+            self.model_path, subfolder='vae', torch_dtype=torch.float32
         )
-        # self.Pipeline = WanPipeline.from_pretrained(
-        #     self.model_path, vae=vae, torch_dtype=torch.bfloat16
-        # )
         self.Pipeline = WanPipeline.from_pretrained(
-            self.model_path, vae=vae, torch_dtype=torch.bfloat16, use_safetensors=True
+            self.model_path, vae=vae, torch_dtype=torch.bfloat16
         )
         self.find_llmc_model()
         self.find_blocks()
@@ -64,17 +61,16 @@ class WanT2V(BaseModel):
 
             def forward(self, *args, **kwargs):
                 params = list(self.signature.parameters.keys())
-                capture_kwargs = dict(kwargs)
                 for i, arg in enumerate(args):
                     if i > 0:
-                        capture_kwargs[params[i]] = arg
+                        kwargs[params[i]] = arg
                 first_block_input['data'].append(args[0])
-                first_block_input['kwargs'].append(capture_kwargs)
+                first_block_input['kwargs'].append(kwargs)
                 self.step += 1
                 if self.step == sample_steps:
                     raise ValueError
                 else:
-                    return self.module(*args, **kwargs)
+                    return self.module(*args)
 
         return Catcher
 

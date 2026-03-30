@@ -677,5 +677,68 @@ class Wan2T2V(BaseModel):
             f'top-level entries={sorted(os.listdir(save_path))}'
         )
 
+    def save_wan2_2_pretrained(self, path):
+        """Wan2.2 专用保存：支持官方 native 与非官方 Pipeline 两种布局。
+
+        该逻辑原本位于 llmc/compression/quantization/base_blockwise_quantization.py 的 Wan2T2V 分支。
+        """
+        if int(os.environ.get('RANK', '0')) != 0:
+            return
+
+        if getattr(self.Pipeline, '_is_wan_official', False):
+            src = getattr(self, 'pipeline_model_path', self.model_path)
+            self.copy_native_checkpoint(src, path)
+
+            self.Pipeline.transformer.save_pretrained(
+                os.path.join(path, 'high_noise_model')
+            )
+            logger.info('save Wan2.2 high_noise_model done --')
+            if (
+                hasattr(self.Pipeline, 'transformer_2')
+                and self.Pipeline.transformer_2 is not None
+            ):
+                self.Pipeline.transformer_2.save_pretrained(
+                    os.path.join(path, 'low_noise_model')
+                )
+                logger.info('save Wan2.2 low_noise_model done --')
+
+            self.validate_native_save_structure(path, source_path=src)
+            return
+
+        # Copy the full original pipeline (VAE, text encoder, tokenizer, scheduler, etc.)
+        # so that non-quantized components are preserved.
+        src = getattr(self, 'pipeline_model_path', self.model_path)
+        copied_from_source = False
+        if isinstance(src, str) and os.path.isdir(src) and os.path.abspath(src) != os.path.abspath(path):
+            if os.path.exists(path):
+                shutil.rmtree(path)
+            shutil.copytree(src, path)
+            logger.info(f'Copied original pipeline from {src} to {path}')
+            copied_from_source = True
+
+        if not copied_from_source:
+            if os.path.exists(path):
+                shutil.rmtree(path)
+            # Fallback for remote repo-id sources: materialize all non-quantized components first.
+            self.Pipeline.save_pretrained(path, safe_serialization=True)
+            logger.info(
+                'save Wan2.2 full pipeline done via Pipeline.save_pretrained '
+                f'(source={src}) --'
+            )
+
+        # Overwrite transformer subfolder with quantized weights.
+        self.Pipeline.transformer.save_pretrained(
+            os.path.join(path, 'transformer')
+        )
+        logger.info('save Wan2.2 transformer done --')
+        if (
+            hasattr(self.Pipeline, 'transformer_2')
+            and self.Pipeline.transformer_2 is not None
+        ):
+            self.Pipeline.transformer_2.save_pretrained(
+                os.path.join(path, 'transformer_2')
+            )
+            logger.info('save Wan2.2 transformer_2 done --')
+
     def skip_layer_name(self):
         pass

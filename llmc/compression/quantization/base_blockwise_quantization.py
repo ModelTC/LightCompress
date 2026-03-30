@@ -1076,57 +1076,7 @@ class BaseBlockwiseQuantization(BlockwiseOpt):
             logger.info('save model done --')
             self.copy_tokenizer(path)
         elif self.config.model.type in ['Wan2T2V']:
-            if getattr(self.model.Pipeline, '_is_wan_official', False):
-                src = getattr(self.model, 'pipeline_model_path', self.model.model_path)
-                self.model.copy_native_checkpoint(src, path)
-
-                self.model.Pipeline.transformer.save_pretrained(
-                    os.path.join(path, 'high_noise_model')
-                )
-                logger.info('save Wan2.2 high_noise_model done --')
-                if (
-                    hasattr(self.model.Pipeline, 'transformer_2')
-                    and self.model.Pipeline.transformer_2 is not None
-                ):
-                    self.model.Pipeline.transformer_2.save_pretrained(
-                        os.path.join(path, 'low_noise_model')
-                    )
-                    logger.info('save Wan2.2 low_noise_model done --')
-                self.model.validate_native_save_structure(path, source_path=src)
-                return
-
-            # Copy the full original pipeline (VAE, text encoder, tokenizer, scheduler, etc.)
-            # so that non-quantized components are preserved.
-            src = getattr(self.model, 'pipeline_model_path', self.model.model_path)
-            copied_from_source = False
-            if isinstance(src, str) and os.path.isdir(src) and os.path.abspath(src) != os.path.abspath(path):
-                if os.path.exists(path):
-                    shutil.rmtree(path)
-                shutil.copytree(src, path)
-                logger.info(f'Copied original pipeline from {src} to {path}')
-                copied_from_source = True
-            if not copied_from_source:
-                if os.path.exists(path):
-                    shutil.rmtree(path)
-                # Fallback for remote repo-id sources: materialize all non-quantized components first.
-                self.model.Pipeline.save_pretrained(path, safe_serialization=True)
-                logger.info(
-                    'save Wan2.2 full pipeline done via Pipeline.save_pretrained '
-                    f'(source={src}) --'
-                )
-            # Overwrite transformer subfolder with quantized weights.
-            self.model.Pipeline.transformer.save_pretrained(
-                os.path.join(path, 'transformer')
-            )
-            logger.info('save Wan2.2 transformer done --')
-            if (
-                hasattr(self.model.Pipeline, 'transformer_2')
-                and self.model.Pipeline.transformer_2 is not None
-            ):
-                self.model.Pipeline.transformer_2.save_pretrained(
-                    os.path.join(path, 'transformer_2')
-                )
-                logger.info('save Wan2.2 transformer_2 done --')
+            self.model.save_wan2_2_pretrained(path)
         else:
             self.model.get_model().save_pretrained(path)
             logger.info('save model done --')

@@ -2,12 +2,12 @@ base:
     seed: &seed 42
 model:
     type: WanT2V
-    path: /mnt/lm_data_afs/wangzining/charles/lab/llmc/models/Wan2.1-T2V-14B-Diffusers
+    path: /path/to/wan_t2v
     torch_dtype: auto
 calib:
     name: t2v
     download: False
-    path: ./assets/wan_t2v/calib/
+    path: ../assets/wan_t2v/calib/
     sample_steps: 20
     bs: 1
     target_height: 480
@@ -20,7 +20,7 @@ eval:
     type: video_gen
     name: t2v
     download: False
-    path: ./assets/wan_t2v/calib/
+    path: ../assets/wan_t2v/calib/
     bs: 1
     target_height: 480
     target_width: 832
@@ -31,12 +31,12 @@ quant:
     video_gen:
         method: Awq
         weight:
-            bit: 4
+            bit: 6
             symmetric: True
             granularity: per_channel
             group_size: -1
         act:
-            bit: 4
+            bit: 6
             symmetric: True
             granularity: per_token
         special:
@@ -46,4 +46,4 @@ quant:
             clip_sym: True
 save:
     save_lightx2v: True
-    save_path: ../lightx2v/wan_t2v_awq_w_a/x2v/
+    save_path: /path/to/x2v/
