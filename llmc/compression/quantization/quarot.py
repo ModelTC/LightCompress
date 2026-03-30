@@ -96,7 +96,7 @@ class Quarot(BaseBlockwiseQuantization):
             raise ValueError(f'Unsupported mode {self.mode}')
 
     def block_transform(self, block):
-        logger.info(f'Start transform the {self.block_idx+1}-th block')
+        logger.info(f'Start transform the {self.block_idx + 1}-th block')
 
         if self.online_rotate:
             self.replace_rotate_linears(block)
@@ -108,7 +108,7 @@ class Quarot(BaseBlockwiseQuantization):
         gc.collect()
 
         logger.info(f'block:{block}')
-        logger.info(f'End transform the {self.block_idx+1}-th block')
+        logger.info(f'End transform the {self.block_idx + 1}-th block')
 
     @torch.no_grad()
     def subset_transform(self, block, subset):

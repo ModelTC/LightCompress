@@ -154,7 +154,7 @@ class BaseBlockwiseSparsification(BlockwiseOpt):
             self.block_transform(block)
 
     def block_transform(self, block, input_feat, block_kwargs):
-        logger.info(f'Start transform the {self.block_idx+1}-th block')
+        logger.info(f'Start transform the {self.block_idx + 1}-th block')
         subsets = self.model.get_subsets_in_block(block)
         for index, subset in enumerate(subsets):
             if not self.filter_subset(subset):
@@ -174,7 +174,7 @@ class BaseBlockwiseSparsification(BlockwiseOpt):
                 inspect_module,
                 subset_kwargs
             )
-        logger.info(f'End transform the {self.block_idx+1}-th block')
+        logger.info(f'End transform the {self.block_idx + 1}-th block')
 
     def filter_subset(self, subset):
         return True
