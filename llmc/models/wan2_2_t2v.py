@@ -2,6 +2,7 @@ import gc
 import copy
 import inspect
 import os
+import shutil
 import sys
 from collections import defaultdict
 from types import SimpleNamespace
@@ -619,6 +620,62 @@ class Wan2T2V(BaseModel):
 
     def get_layers_except_blocks(self):
         pass
+
+    @staticmethod
+    def copy_native_checkpoint(src, dst):
+        """Copy full Wan2.2 native checkpoint tree before overwriting expert safetensors."""
+        if not isinstance(src, str) or not os.path.isdir(src):
+            raise RuntimeError(
+                'Wan2.2 official save expects a local native checkpoint directory, '
+                f'but got src={src!r}.'
+            )
+        if os.path.abspath(src) == os.path.abspath(dst):
+            raise RuntimeError(
+                'Wan2.2 official save path must differ from source checkpoint path '
+                f'(src=dst={src}).'
+            )
+        if os.path.exists(dst):
+            shutil.rmtree(dst)
+        shutil.copytree(src, dst)
+        logger.info(f'Copied original Wan2.2 native checkpoint from {src} to {dst}')
+
+    @staticmethod
+    def validate_native_save_structure(save_path, source_path=None):
+        """Verify saved directory has Wan2.2 native layout (experts + copied non-expert assets)."""
+        if not os.path.isdir(save_path):
+            raise RuntimeError(f'Wan2.2 saved path is not a directory: {save_path}')
+
+        required_entries = ['configuration.json', 'high_noise_model', 'low_noise_model']
+        missing_required = [
+            name for name in required_entries
+            if not os.path.exists(os.path.join(save_path, name))
+        ]
+        if missing_required:
+            raise RuntimeError(
+                'Wan2.2 saved structure is incomplete. Missing required entries: '
+                f'{missing_required}. save_path={save_path}'
+            )
+
+        if isinstance(source_path, str) and os.path.isdir(source_path):
+            source_entries = set(os.listdir(source_path))
+            source_non_expert_entries = sorted(
+                name for name in source_entries
+                if name not in {'high_noise_model', 'low_noise_model'}
+            )
+            missing_non_expert = [
+                name for name in source_non_expert_entries
+                if not os.path.exists(os.path.join(save_path, name))
+            ]
+            if missing_non_expert:
+                raise RuntimeError(
+                    'Wan2.2 saved structure lost original non-expert files/directories: '
+                    f'{missing_non_expert}. source_path={source_path}, save_path={save_path}'
+                )
+
+        logger.info(
+            f'Wan2.2 native save structure verified. '
+            f'top-level entries={sorted(os.listdir(save_path))}'
+        )
 
     def skip_layer_name(self):
         pass
