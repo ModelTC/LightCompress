@@ -1,5 +1,0 @@
-我需要给wan2.2(https://huggingface.co/Wan-AI/Wan2.2-Animate-14B-Diffusers)进行hifp4的模拟量化，使用的方法是AWQ
-但是比赛给的要求允许2个transformer-block的权重不进行量化，我觉得transformer和transformer_2的第0个block的权重不进行量化是收益最大的，请在当前branch基础上新建一个branch进行相应修改，并在修改完上传github
-请参考配置文件configs/quantization/video_gen/wan2_2_t2v/awq_w_a.yaml和和运行脚本scripts/run_llmc.sh，帮我进行修改
-请注意，我现在的电脑是本地主机而不是服务器，所以需要你从代码本身的逻辑去修改而不能真的运行
-你有权限修改本文件夹下所有文件
