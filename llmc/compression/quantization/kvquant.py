@@ -14,7 +14,8 @@ class NaiveQuantKVCache(DynamicCache):
     def __init__(self, quant_type, kvquant_cfg, num_hidden_layers, num_samples=128, bsz=1):
         super().__init__()
 
-        # Copy the config to avoid mutating the original quantization config in static KV calibration.
+        # Copy the config to avoid mutating the original quantization
+        # config in static KV calibration.
         kvquant_cfg = copy.deepcopy(kvquant_cfg)
         assert kvquant_cfg.granularity in ['per_token', 'per_tensor', 'per_group', 'per_head']
         self.num_hidden_layers, self.num_samples, self.bsz = (
