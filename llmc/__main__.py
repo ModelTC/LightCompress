@@ -18,9 +18,9 @@ from llmc.compression.token_reduction import *
 from llmc.data import BaseDataset
 from llmc.eval.utils import eval_model, get_eval_list
 from llmc.models import *
-from llmc.utils import (check_config, deploy_all_modality, get_modality,
-                        mkdirs, print_important_package_version, seed_all,
-                        collect_lightllm_kv_calib_json,
+from llmc.utils import (check_config, collect_lightllm_kv_calib_json,
+                        deploy_all_modality, get_modality, mkdirs,
+                        print_important_package_version, seed_all,
                         update_autoawq_quant_config,
                         update_lightx2v_quant_config, update_vllm_quant_config)
 from llmc.utils.registry_factory import ALGO_REGISTRY, MODEL_REGISTRY
@@ -290,4 +290,3 @@ if __name__ == '__main__':
     llmc_duration_time = llmc_end_time - llmc_start_time
     logger.info(f'llmc_duration_time: {llmc_duration_time} s')
     logger.info('--- llmc finished ---')
-    

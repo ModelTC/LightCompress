@@ -59,7 +59,8 @@ class Mixtral(BaseModel):
         return self._get_subsets_fused(block)
 
     def _get_subsets_legacy(self, block):
-        """transformers <5.0: block.block_sparse_moe with ModuleList experts."""
+        """Transformers <5.0: block.block_sparse_moe with ModuleList
+        experts."""
         moe = block.block_sparse_moe
         return [
             {
@@ -106,7 +107,7 @@ class Mixtral(BaseModel):
         ]
 
     def _get_subsets_fused(self, block):
-        """transformers >=5.0: block.mlp with fused MixtralExperts."""
+        """Transformers >=5.0: block.mlp with fused MixtralExperts."""
         moe = block.mlp
         return [
             {
