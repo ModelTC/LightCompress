@@ -22,7 +22,5 @@ save*
 .log
 *.pid
 *.ipynb*
-model/
-output_*
-HiFloat4/
-datasets/
+.venv/
+*.sh

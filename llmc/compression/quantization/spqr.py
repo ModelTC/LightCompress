@@ -90,7 +90,7 @@ class SpQR(BaseBlockwiseQuantization):
 
     @torch.no_grad()
     def block_transform(self, block, input_feat, *block_kwargs):
-        logger.info(f'Start transform the {self.block_idx+1}-th block')
+        logger.info(f'Start transform the {self.block_idx + 1}-th block')
 
         if self.true_sequential:
             self.block_transform_true_sequential(block, input_feat)
@@ -103,7 +103,7 @@ class SpQR(BaseBlockwiseQuantization):
                 self.get_replacement_params(mode='fake_quant', w_only=True),
             )
 
-        logger.info(f'End transform the {self.block_idx+1}-th block')
+        logger.info(f'End transform the {self.block_idx + 1}-th block')
 
     @torch.no_grad()
     def subset_transform(self, layers_dict):

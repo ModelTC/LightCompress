@@ -39,7 +39,8 @@ quant:
         method: Naive
         bit: 8
         symmetric: True
-        granularity: per_tensor
+        granularity: per_head
+        head_num: kv head num
 save:
     save_lightllm_kv_calib: True
     lightllm_kv_cache_name: kv_cache_calib.json

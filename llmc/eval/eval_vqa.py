@@ -255,8 +255,8 @@ class VQAEval:
             gen_max_mem = torch.cuda.max_memory_allocated() / 1024 / 1024
 
             logger.info(f'peak memory: {gen_max_mem:.1f} MB.')
-            logger.info(f'prefill average time: {prefill *1000:.1f} ms.')
-            logger.info(f'decode average time: {decode *1000:.1f} ms.')
+            logger.info(f'prefill average time: {prefill * 1000:.1f} ms.')
+            logger.info(f'decode average time: {decode * 1000:.1f} ms.')
 
         if hasattr(lm, '_model'):
             del lm._model
