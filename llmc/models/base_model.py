@@ -119,7 +119,7 @@ class BaseModel(metaclass=ABCMeta):
         pass
 
     def build_tokenizer(self):
-        if self.model_type not in ['Vit', 'WanT2V', 'WanI2V']:
+        if self.model_type not in ['Vit', 'WanT2V', 'WanI2V', 'Wan2T2V']:
             assert self.tokenizer_mode in ['fast', 'slow']
             self.tokenizer = AutoTokenizer.from_pretrained(
                 self.model_path, use_fast=self.tokenizer_mode, trust_remote_code=True
@@ -129,7 +129,7 @@ class BaseModel(metaclass=ABCMeta):
             if self.tokenizer.pad_token is None:
                 self.tokenizer.pad_token = self.tokenizer.eos_token
         else:
-            self.tokenizer = None
+            self.tokenizer = None 
 
     def get_tokenizer(self):
         return self.tokenizer

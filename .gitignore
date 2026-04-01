@@ -22,5 +22,8 @@ save*
 .log
 *.pid
 *.ipynb*
+model/
+output_*
+datasets/
 .venv/
 *.sh
