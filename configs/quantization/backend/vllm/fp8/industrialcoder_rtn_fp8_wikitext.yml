@@ -1,0 +1,33 @@
+base:
+    seed: &seed 42
+model:
+    type: IndustrialCoder
+    path: model/IndustrialCoder-32B
+    tokenizer_mode: slow
+    torch_dtype: auto
+    # Reduce peak memory in catcher stage for large models.
+    use_cpu_to_save_cuda_mem_for_catcher: False
+eval:
+    eval_pos: [fake_quant]
+    name: wikitext2
+    download: True
+    seq_len: 2048
+    bs: 1
+    inference_per_block: False
+quant:
+    method: RTN
+    weight:
+        quant_type: float-quant
+        bit: e4m3
+        symmetric: True
+        granularity: per_channel
+        use_qtorch: True
+    act:
+        quant_type: float-quant
+        bit: e4m3
+        symmetric: True
+        granularity: per_token
+        use_qtorch: True
+save:
+    save_vllm: True
+    save_path: ./save_for_vllm/industrialcoder_rtn_fp8_wikitext/

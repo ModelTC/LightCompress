@@ -1,0 +1,43 @@
+base:
+    seed: &seed 42
+model:
+    type: IndustrialCoder
+    path: model/IndustrialCoder-32B
+    tokenizer_mode: slow
+    torch_dtype: auto
+    # Reduce peak memory in catcher stage for large models.
+    use_cpu_to_save_cuda_mem_for_catcher: False
+calib:
+    name: wikitext2
+    download: True
+    n_samples: 128
+    # path: calib data path
+    bs: 1
+    seq_len: 2048
+    preproc: wikitext2_gptq
+    seed: *seed
+eval:
+    eval_pos: [fake_quant]
+    name: wikitext2
+    download: True
+    seq_len: 2048
+    bs: 20
+    inference_per_block: True
+quant:
+    method: GPTQ
+    weight:
+        bit: 4
+        symmetric: True
+        granularity: per_group
+        group_size: 128
+        need_pack: True
+    special:
+        actorder: True
+        static_groups: True
+        percdamp: 0.01
+        blocksize: 128
+        true_sequential: True
+    quant_out: True
+save:
+    save_vllm: True
+    save_path: ./save_for_vllm/industrialcoder_rtn_int_gptq_wikitext/

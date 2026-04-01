@@ -34,7 +34,12 @@ from .module_utils import (_LLMC_LINEAR_TYPES_, _LLMC_LN_TYPES_,
                            _TRANSFORMERS_LN_TYPES_, EffcientFakeQuantLinear,
                            FakeQuantLinear, LlmcActFn, OriginFloatLinear,
                            RotateLinear)
-from .quant import FloatQuantizer, IntegerQuantizer, Weight48IntegerQuantizer
+from .quant import (
+    FloatQuantizer,
+    HiFloat4Quantizer,
+    IntegerQuantizer,
+    Weight48IntegerQuantizer,
+)
 
 
 class BaseBlockwiseQuantization(BlockwiseOpt):
@@ -156,6 +161,8 @@ class BaseBlockwiseQuantization(BlockwiseOpt):
                 self.weight_quant_module = IntegerQuantizer
         elif quant_type == 'float-quant':
             self.weight_quant_module = FloatQuantizer
+        elif quant_type == 'hif4':
+            self.weight_quant_module = HiFloat4Quantizer
         logger.info(f'The used Weight Quant Module is {self.weight_quant_module}')
         self.wquantizer = self.weight_quant_module(**self.quant_config['weight'])
 

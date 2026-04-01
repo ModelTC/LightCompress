@@ -172,9 +172,10 @@ class BaseDataset(metaclass=ABCMeta):
         return calib_model_inputs
 
     def get_calib_dataset(self):
-        samples = self.calib_dataset[
-            int(os.environ['RANK'])::int(os.environ['WORLD_SIZE'])
-        ]
+        samples = self.calib_dataset.shard(
+            num_shards=int(os.environ['WORLD_SIZE']), 
+            index=int(os.environ['RANK'])
+        )
         logger.info(f'len(samples) rank : {len(samples)}')
 
         calib_model_inputs = self.get_calib_model_inputs(samples)

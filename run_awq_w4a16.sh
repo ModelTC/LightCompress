@@ -1,19 +1,30 @@
+#!/bin/bash
 export PATH=/mnt/lm_data_afs/wangzining/charles/miniconda3/envs/llmc/bin:$PATH
 export PYTHON=/mnt/lm_data_afs/wangzining/charles/miniconda3/envs/llmc/bin/python
 export PIP=/mnt/lm_data_afs/wangzining/charles/miniconda3/envs/llmc/bin/pip
 export HF_ENDPOINT=https://hf-mirror.com
+
 cd /mnt/lm_data_afs/wangzining/charles/lab/llmc
-# model_name=wan_t2v
-model_name=wan2_2_t2v
-task_name=awq_w_a
-# task_name=awq_w_a_s
-log_name=${model_name}_${task_name}
-rm -rf ./save_for_lightx2v/${model_name}/${task_name}/original
+
+
+model_name=thinking_model   
+method_name=awq
+dataset_name=wikitext
+# ==============================
+
+log_name=${model_name}_${method_name}_${dataset_name}
+rm -rf ./save_for_vllm/${log_name}/
+
 llmc=.
 export PYTHONPATH=$llmc:$PYTHONPATH
-config=${llmc}/configs/quantization/video_gen/${model_name}/${task_name}.yaml
+
+
+config=${llmc}/configs/quantization/backend/vllm/thinkingmodel/thinkingmodel_awq_w4a16.yml
+
+
 nnodes=1
-nproc_per_node=1
+nproc_per_node=4
+# ==========================
 
 find_unused_port() {
     while true; do
@@ -29,6 +40,7 @@ MASTER_ADDR=127.0.0.1
 MASTER_PORT=$UNUSED_PORT
 task_id=$UNUSED_PORT
 
+echo "开始执行任务，日志将保存在 ${log_name}.log"
 
 torchrun \
 --nnodes $nnodes \
@@ -36,4 +48,4 @@ torchrun \
 --rdzv_id $task_id \
 --rdzv_backend c10d \
 --rdzv_endpoint $MASTER_ADDR:$MASTER_PORT \
-${llmc}/llmc/__main__.py --config $config --task_id $task_id |tee ${log_name}.log 
+${llmc}/llmc/__main__.py --config $config --task_id $task_id | tee ${log_name}.log
