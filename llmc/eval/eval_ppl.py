@@ -3,9 +3,10 @@ from concurrent.futures import ThreadPoolExecutor
 
 import torch
 import torch.nn as nn
-from datasets import load_dataset, load_from_disk
 from loguru import logger
 from tqdm import tqdm
+
+from datasets import load_dataset, load_from_disk
 
 from .eval_base import BaseEval
 

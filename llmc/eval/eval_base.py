@@ -5,9 +5,10 @@ from concurrent.futures import ThreadPoolExecutor
 
 import torch
 import torch.nn as nn
-from datasets import load_dataset, load_from_disk
 from human_eval.data import read_problems
 from loguru import logger
+
+from datasets import load_dataset, load_from_disk
 
 
 class BaseEval:

@@ -6,8 +6,9 @@
 import argparse
 import os
 
-from datasets import load_dataset
 from loguru import logger
+
+from datasets import load_dataset
 
 
 def download(calib_dataset_name, path):

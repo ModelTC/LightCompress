@@ -129,7 +129,7 @@ class BaseModel(metaclass=ABCMeta):
             if self.tokenizer.pad_token is None:
                 self.tokenizer.pad_token = self.tokenizer.eos_token
         else:
-            self.tokenizer = None 
+            self.tokenizer = None
 
     def get_tokenizer(self):
         return self.tokenizer

@@ -1,5 +1,5 @@
-import gc
 import copy
+import gc
 import inspect
 import os
 import shutil
@@ -19,7 +19,8 @@ from .base_model import BaseModel
 
 
 class WanOfficialPipelineAdapter:
-    """Adapter that exposes Wan-Video/Wan2.2 official t2v runtime as a Pipeline-like interface."""
+    """Adapter that exposes Wan-Video/Wan2.2 official t2v runtime as a
+    Pipeline-like interface."""
 
     def __init__(
         self,
@@ -116,7 +117,8 @@ class WanOfficialPipelineAdapter:
 
 @MODEL_REGISTRY
 class Wan2T2V(BaseModel):
-    """Wan2.2-T2V with MoE: two experts (high-noise + low-noise), same block structure as Wan2.1."""
+    """Wan2.2-T2V with MoE: two experts (high-noise + low-noise), same block
+    structure as Wan2.1."""
 
     def __init__(self, config, device_map=None, use_cache=False):
         super().__init__(config, device_map, use_cache)
@@ -200,11 +202,13 @@ class Wan2T2V(BaseModel):
                     return _import_impl()
                 except Exception as e2:
                     logger.warning(
-                        f'Failed to import official Wan2.2 from wan2_repo_path={repo_path}: {e2}'
+                        'Failed to import official Wan2.2 from '
+                        f'wan2_repo_path={repo_path}: {e2}'
                     )
             logger.warning(
                 'Failed to import official Wan2.2 runtime (wan package). '
-                'Diffusers fallback depends on model.allow_diffusers_fallback/model.force_diffusers. '
+                'Diffusers fallback depends on model.allow_diffusers_fallback/'
+                'model.force_diffusers. '
                 f'import_error={e}'
             )
             return None, None
@@ -257,7 +261,8 @@ class Wan2T2V(BaseModel):
         self.pipeline_source = 'wan_official'
         self.use_official_wan = True
         logger.info(
-            f'Loaded Wan2.2 via official Wan runtime from native checkpoint: {normalized_model_path}'
+            'Loaded Wan2.2 via official Wan runtime from native checkpoint: '
+            f'{normalized_model_path}'
         )
         return True
 
@@ -360,7 +365,10 @@ class Wan2T2V(BaseModel):
                 new_block = LlmcWanTransformerBlock.new(block)
                 self.Pipeline.transformer_2.blocks[block_idx] = new_block
             self.num_transformer_blocks = len(self.Pipeline.transformer.blocks)
-            self.blocks = list(self.Pipeline.transformer.blocks) + list(self.Pipeline.transformer_2.blocks)
+            self.blocks = (
+                list(self.Pipeline.transformer.blocks)
+                + list(self.Pipeline.transformer_2.blocks)
+            )
             logger.info(
                 'Wan2.2 MoE: both experts wrapped (high-noise + low-noise, 80 blocks total).'
             )
@@ -456,7 +464,10 @@ class Wan2T2V(BaseModel):
                     first_block_input[self.expert_name]['kwargs'].append(
                         {k: self._to_cpu(v) for k, v in capture_kwargs.items()}
                     )
-                if all(len(first_block_input[name]['data']) >= sample_steps for name in first_block_input):
+                if all(
+                    len(first_block_input[name]['data']) >= sample_steps
+                    for name in first_block_input
+                ):
                     raise ValueError
                 return self.module(*args, **kwargs)
 
@@ -488,10 +499,13 @@ class Wan2T2V(BaseModel):
 
         self.Pipeline.transformer.blocks[0] = self.Pipeline.transformer.blocks[0].module
         if first_block_2 is not None:
-            self.Pipeline.transformer_2.blocks[0] = self.Pipeline.transformer_2.blocks[0].module
+            transformer_2 = self.Pipeline.transformer_2
+            transformer_2.blocks[0] = transformer_2.blocks[0].module
         self.Pipeline.to('cpu')
 
-        assert len(first_block_input['transformer']['data']) > 0, 'Catch transformer input data failed.'
+        assert len(first_block_input['transformer']['data']) > 0, (
+            'Catch transformer input data failed.'
+        )
         if hasattr(self.Pipeline, 'transformer_2') and self.Pipeline.transformer_2 is not None:
             assert len(first_block_input['transformer_2']['data']) > 0, \
                 'Catch transformer_2 input data failed.'
@@ -623,7 +637,8 @@ class Wan2T2V(BaseModel):
 
     @staticmethod
     def copy_native_checkpoint(src, dst):
-        """Copy full Wan2.2 native checkpoint tree before overwriting expert safetensors."""
+        """Copy full Wan2.2 native checkpoint tree before overwriting expert
+        safetensors."""
         if not isinstance(src, str) or not os.path.isdir(src):
             raise RuntimeError(
                 'Wan2.2 official save expects a local native checkpoint directory, '
@@ -641,7 +656,8 @@ class Wan2T2V(BaseModel):
 
     @staticmethod
     def validate_native_save_structure(save_path, source_path=None):
-        """Verify saved directory has Wan2.2 native layout (experts + copied non-expert assets)."""
+        """Verify saved directory has Wan2.2 native layout (experts + copied
+        non-expert assets)."""
         if not os.path.isdir(save_path):
             raise RuntimeError(f'Wan2.2 saved path is not a directory: {save_path}')
 
@@ -705,11 +721,12 @@ class Wan2T2V(BaseModel):
             self.validate_native_save_structure(path, source_path=src)
             return
 
-        # Copy the full original pipeline (VAE, text encoder, tokenizer, scheduler, etc.)
-        # so that non-quantized components are preserved.
+        # Copy the full original pipeline (VAE, text encoder, tokenizer,
+        # scheduler, etc.) so that non-quantized components are preserved.
         src = getattr(self, 'pipeline_model_path', self.model_path)
         copied_from_source = False
-        if isinstance(src, str) and os.path.isdir(src) and os.path.abspath(src) != os.path.abspath(path):
+        same_path = os.path.abspath(src) == os.path.abspath(path)
+        if isinstance(src, str) and os.path.isdir(src) and not same_path:
             if os.path.exists(path):
                 shutil.rmtree(path)
             shutil.copytree(src, path)
