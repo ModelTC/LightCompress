@@ -25,6 +25,7 @@ class BaseEval:
             'wikitext2',
             'c4',
             'ptb',
+            'pile',
             'custom',
             'human_eval',
             'mme',
@@ -32,7 +33,7 @@ class BaseEval:
             'custom_gen',
             't2v',
             'i2v',
-        ], f'Not support {self.dataset} dataset now.'
+        ], f'Not support {self.eval_dataset_name} dataset now.'
         self.seq_len = self.eval_cfg.get('seq_len', None)
         self.num_samples = self.eval_cfg.get('num_samples', None)
         self.num_eval_tokens = self.eval_cfg.get('num_eval_tokens', None)
@@ -67,6 +68,10 @@ class BaseEval:
                     testdata = load_dataset(
                         'ptb_text_only', 'penn_treebank', split='test'
                     )
+                elif self.eval_dataset_name == 'pile':
+                    testdata = load_dataset(
+                        'mit-han-lab/pile-val-backup', split='validation'
+                    )
             else:
                 if self.eval_dataset_name in ['custom_gen', 'custom_ppl', 't2v', 'i2v']:
                     testdata = self.get_cutomdata(self.eval_dataset_path)
@@ -90,6 +95,10 @@ class BaseEval:
             elif self.eval_dataset_name == 'ptb':
                 testenc = self.tokenizer(
                     ' '.join(testdata['sentence']), return_tensors='pt'
+                )
+            elif self.eval_dataset_name == 'pile':
+                testenc = self.tokenizer(
+                    '\n\n'.join(testdata['text'][:1000]), return_tensors='pt'
                 )
             elif self.eval_dataset_name == 'custom_ppl':
                 testenc = self.tokenizer(

@@ -176,7 +176,7 @@ class TesseraQ(BaseBlockwiseQuantization):
 
     @torch.no_grad()
     def block_transform(self, block, input_feat, block_kwargs):
-        logger.info(f'Start transform the {self.block_idx+1}-th block')
+        logger.info(f'Start transform the {self.block_idx + 1}-th block')
 
         with torch.no_grad():
             block.float()
@@ -204,7 +204,7 @@ class TesseraQ(BaseBlockwiseQuantization):
         if self.reduce_memory:
             block.to(self.model_dtype)
 
-        logger.info(f'End transform the {self.block_idx+1}-th block')
+        logger.info(f'End transform the {self.block_idx + 1}-th block')
 
     def tesseraq_train(self, block):
         self.set_dynamic_tmp_quant(block, on=True)
@@ -273,8 +273,8 @@ class TesseraQ(BaseBlockwiseQuantization):
                     norm = loss_scaler(loss, optimizer, parameters=params_r + params_s)
 
                 logger.info(
-                    f'block {self.block_idx} iter {i+1} loss:{loss.item():5f} \
-                    norm:{norm.item():4f} HR progress:{(1-thresholds[i])*100:1f}% '
+                    f'block {self.block_idx} iter {i + 1} loss:{loss.item():5f} \
+                    norm:{norm.item():4f} HR progress:{(1 - thresholds[i]) * 100:1f}% '
                 )
                 for p in params_r + params_s:
                     p.requires_grad = False

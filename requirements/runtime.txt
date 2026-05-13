@@ -6,6 +6,7 @@ loguru
 transformers>=4.45.2
 lmms-eval==0.3.0
 huggingface-hub
+safetensors
 sentencepiece
 protobuf
 accelerate>=0.26.0

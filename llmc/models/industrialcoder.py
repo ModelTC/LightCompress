@@ -1,5 +1,4 @@
-"""
-IndustrialCoder (IQuestCoder) model adapter for LLMC quantization.
+"""IndustrialCoder (IQuestCoder) model adapter for LLMC quantization.
 
 Model structure follows IQuestCoderForCausalLM / IQuestCoderModel:
   - model.model.embed_tokens, model.model.layers, model.model.norm, model.model.rotary_emb
@@ -22,7 +21,8 @@ from .base_model import BaseModel
 
 @MODEL_REGISTRY
 class IndustrialCoder(BaseModel):
-    """IndustrialCoder (IQuestCoder) – standalone adapter for blockwise quantization."""
+    """IndustrialCoder (IQuestCoder) standalone adapter for blockwise
+    quantization."""
 
     def __init__(self, config, device_map=None, use_cache=False):
         super().__init__(config, device_map, use_cache)
@@ -50,7 +50,9 @@ class IndustrialCoder(BaseModel):
 
     def get_attention_rotary_layers(self):
         if packaging.version.parse(version('transformers')) >= packaging.version.parse('4.45.0'):
-            return [self.rotary_emb] if hasattr(self, 'rotary_emb') and self.rotary_emb is not None else []
+            if hasattr(self, 'rotary_emb') and self.rotary_emb is not None:
+                return [self.rotary_emb]
+            return []
         return []
 
     def get_head_layers(self):
@@ -61,7 +63,9 @@ class IndustrialCoder(BaseModel):
 
     def get_layers_except_blocks(self):
         if packaging.version.parse(version('transformers')) >= packaging.version.parse('4.45.0'):
-            rotary = [self.rotary_emb] if hasattr(self, 'rotary_emb') and self.rotary_emb is not None else []
+            rotary = []
+            if hasattr(self, 'rotary_emb') and self.rotary_emb is not None:
+                rotary = [self.rotary_emb]
             return [self.embed_tokens] + rotary + [self.model.model.norm, self.model.lm_head]
         return [self.embed_tokens, self.model.model.norm, self.model.lm_head]
 

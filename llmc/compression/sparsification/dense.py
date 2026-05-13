@@ -11,6 +11,6 @@ class Dense(BaseBlockwiseSparsification):
         super().__init__(model, sparsity_config, input, padding_mask, config)
 
     def block_transform(self, block):
-        logger.info(f'Start transform the {self.block_idx+1}-th block')
+        logger.info(f'Start transform the {self.block_idx + 1}-th block')
         logger.info(block)
-        logger.info(f'End transform the {self.block_idx+1}-th block')
+        logger.info(f'End transform the {self.block_idx + 1}-th block')

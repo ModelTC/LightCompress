@@ -226,27 +226,24 @@ class BaseQuantizer(object):
             for tensor in tensors:
                 tensor = self.reshape_tensor(tensor)
                 tensor_range = self.get_minmax_range(tensor)
-                min_val, max_val = tensor_range[0], tensor_range[1]
+                min_val = tensor_range[0].detach().cpu().to(torch.float32)
+                max_val = tensor_range[1].detach().cpu().to(torch.float32)
 
                 if input_idx not in stats_min_max:
                     stats_min_max[input_idx] = {}
-                    stats_min_max[input_idx]['min'] = torch.tensor(
-                        [min_val], dtype=torch.float32
-                    )
-                    stats_min_max[input_idx]['max'] = torch.tensor(
-                        [max_val], dtype=torch.float32
-                    )
+                    stats_min_max[input_idx]['min'] = min_val.unsqueeze(0)
+                    stats_min_max[input_idx]['max'] = max_val.unsqueeze(0)
                 else:
                     stats_min_max[input_idx]['min'] = torch.cat(
                         [
                             stats_min_max[input_idx]['min'],
-                            torch.tensor([min_val], dtype=torch.float32),
+                            min_val.unsqueeze(0),
                         ]
                     )
                     stats_min_max[input_idx]['max'] = torch.cat(
                         [
                             stats_min_max[input_idx]['max'],
-                            torch.tensor([max_val], dtype=torch.float32),
+                            max_val.unsqueeze(0),
                         ]
                     )
 
@@ -257,8 +254,8 @@ class BaseQuantizer(object):
         stats_min_max = self.get_minmax_stats(act_tensors)
         min_vals, max_vals = [], []
         for input_idx, tensor_range in stats_min_max.items():
-            min_val = tensor_range['min'].mean()
-            max_val = tensor_range['max'].mean()
+            min_val = tensor_range['min'].mean(dim=0)
+            max_val = tensor_range['max'].mean(dim=0)
             min_vals.append(min_val)
             max_vals.append(max_val)
 
@@ -1229,103 +1226,6 @@ class FloatQuantizer(BaseQuantizer):
             f'granularity={self.granularity},'
             f'kwargs={self.kwargs}, qmin={self.qmin}, qmax={self.qmax})'
         )
-
-
-def _get_hif4_quant_cy():
-    """Lazy import HiFloat4 quant_cy (QType, quant_dequant_float) from HiFloat4/hif4_gpu."""
-    _repo_root = os.path.dirname(
-        os.path.dirname(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        )
-    )
-    _hif4_gpu = os.path.join(_repo_root, 'HiFloat4', 'hif4_gpu')
-    if _hif4_gpu not in sys.path:
-        sys.path.insert(0, _hif4_gpu)
-    try:
-        from quant_cy import QType, quant_dequant_float
-        return QType, quant_dequant_float
-    except Exception as e:
-        raise ImportError(
-            'HiFloat4 4-bit quantization requires the HiFloat4/hif4_gpu package. '
-            'Ensure HiFloat4 is available at repo_root/HiFloat4/hif4_gpu and built.'
-        ) from e
-
-
-class HiFloat4Quantizer(BaseQuantizer):
-    """4-bit HiFloat (hif4) simulation quantizer using HiFloat4 quant_dequant_float.
-
-    Uses the HiFloat4 library's quant_dequant_float for block-wise float 4-bit
-    quantization. No scales/zeros; quantization is done per block along the last dim.
-    Only supports fake (simulation) quantization; real weight packing is not implemented.
-    """
-
-    def __init__(self, bit=4, symmetric=None, granularity=None, **kwargs):
-        super().__init__(bit, symmetric, granularity, **kwargs)
-        self.quant_type = 'hif4'
-        self.q_dim = kwargs.get('hif4_qdim', -1)
-        self.force_py = kwargs.get('force_py', False)
-        self.force_fp32 = kwargs.get('force_fp32', True)
-        self._QType = None
-        self._quant_dequant_float = None
-
-    def _ensure_hif4(self):
-        if self._quant_dequant_float is None:
-            self._QType, self._quant_dequant_float = _get_hif4_quant_cy()
-
-    def fake_quant_act_static(self, act, args={}):
-        self._ensure_hif4()
-        org_dtype = act.dtype
-        qtype = self._QType('hifx4').dim(self.q_dim)
-        out = self._quant_dequant_float(
-            act, qtype, force_py=self.force_py, force_fp32=self.force_fp32
-        )
-        return out.to(org_dtype)
-
-    def fake_quant_act_dynamic(self, act, args={}):
-        self._ensure_hif4()
-        org_dtype = act.dtype
-        qtype = self._QType('hifx4').dim(self.q_dim)
-        out = self._quant_dequant_float(
-            act, qtype, force_py=self.force_py, force_fp32=self.force_fp32
-        )
-        return out.to(org_dtype)
-
-    def fake_quant_weight_static(self, weight, args):
-        self._ensure_hif4()
-        org_dtype = weight.dtype
-        qtype = self._QType('hifx4').dim(self.q_dim)
-        out = self._quant_dequant_float(
-            weight, qtype, force_py=self.force_py, force_fp32=self.force_fp32
-        )
-        return out.to(org_dtype)
-
-    def fake_quant_weight_dynamic(self, weight, args={}):
-        self._ensure_hif4()
-        org_dtype = weight.dtype
-        qtype = self._QType('hifx4').dim(self.q_dim)
-        out = self._quant_dequant_float(
-            weight, qtype, force_py=self.force_py, force_fp32=self.force_fp32
-        )
-        return out.to(org_dtype)
-
-    def real_quant_weight_static(self, weight, args):
-        raise NotImplementedError(
-            'HiFloat4 quantizer is simulation-only (fake quant). '
-            'real_quant_weight is not supported for hif4.'
-        )
-
-    def real_quant_weight_dynamic(self, weight, args={}):
-        raise NotImplementedError(
-            'HiFloat4 quantizer is simulation-only (fake quant). '
-            'real_quant_weight is not supported for hif4.'
-        )
-
-    def __repr__(self):
-        return (
-            f'HiFloat4Quantizer(quant_type=hif4, q_dim={self.q_dim}, '
-            f'force_py={self.force_py}, force_fp32={self.force_fp32})'
-        )
-
 
 class Weight48IntegerQuantizer(BaseQuantizer):
     # flake8: noqa

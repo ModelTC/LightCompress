@@ -445,6 +445,7 @@ class LlmcQwen2RMSNorm(LlmcLlamaRMSNorm):
     def __repr__(self):
         return 'LlmcQwen2RMSNorm()'
 
+
 class LlmcIndustrialCoderRMSNorm(LlmcLlamaRMSNorm):
     def __init__(self, weight, eps=1e-6):
         super().__init__(weight, eps)
@@ -899,6 +900,7 @@ class VllmRealQuantLinear(nn.Module):
             bias = None
 
         need_pack = quant_config['weight'].get('need_pack', False)
+
         if quant_config['weight']['granularity'] == 'per_block':
             scales_name = 'weight_scale_inv'
         else:

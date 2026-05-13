@@ -34,6 +34,8 @@ docker pull registry.cn-hangzhou.aliyuncs.com/yongyang/llmcompression:pure-lates
 
 **Docs**: [English](https://llmc-en.readthedocs.io/en/latest/), [Chinese](https://llmc-zhcn.readthedocs.io/en/latest/).
 
+> **Recommended Python Version**: We recommend using **Python 3.11** for local development and installation. This matches the project's Docker images and CI configuration, and is generally more stable than Python 3.12 for the current dependency set.
+
 ## :fire: Latest News
 
 - **Nov 9, 2025:** 🍺🍺🍺 Our work [**LLMC+: Benchmarking Vision-Language Model Compression with a Plug-and-play Toolkit**](https://arxiv.org/abs/2508.09981) has been accepted by AAAI 2026.
@@ -250,11 +252,14 @@ We develop our code referring to the following repos:
 If you find our toolkit or research paper useful or relevant to your research, please kindly cite our work:
 
 ```
-@article{lv2025llmc+,
-  title={LLMC+: Benchmarking Vision-Language Model Compression with a Plug-and-play Toolkit},
+@inproceedings{lv2026llmc+,
+  title={Llmc+: Benchmarking vision-language model compression with a plug-and-play toolkit},
   author={Lv, Chengtao and Zhang, Bilang and Yong, Yang and Gong, Ruihao and Huang, Yushi and Gu, Shiqiao and Wu, Jiajun and Shi, Yumeng and Guo, Jinyang and Wang, Wenya},
-  journal={arXiv preprint arXiv:2508.09981},
-  year={2025}
+  booktitle={Proceedings of the AAAI Conference on Artificial Intelligence},
+  volume={40},
+  number={29},
+  pages={24189--24197},
+  year={2026}
 }
 ```
 

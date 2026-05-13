@@ -1,9 +1,9 @@
 import copy
 import functools
 import gc
-import json
 import os
 import re
+import shutil
 from collections import defaultdict
 from functools import partial
 
@@ -37,7 +37,6 @@ from .module_utils import (_LLMC_LINEAR_TYPES_, _LLMC_LN_TYPES_,
                            RotateLinear)
 from .quant import (
     FloatQuantizer,
-    HiFloat4Quantizer,
     IntegerQuantizer,
     Weight48IntegerQuantizer,
 )
@@ -162,8 +161,6 @@ class BaseBlockwiseQuantization(BlockwiseOpt):
                 self.weight_quant_module = IntegerQuantizer
         elif quant_type == 'float-quant':
             self.weight_quant_module = FloatQuantizer
-        elif quant_type == 'hif4':
-            self.weight_quant_module = HiFloat4Quantizer
         logger.info(f'The used Weight Quant Module is {self.weight_quant_module}')
         self.wquantizer = self.weight_quant_module(**self.quant_config['weight'])
 
@@ -182,20 +179,18 @@ class BaseBlockwiseQuantization(BlockwiseOpt):
                     self.act_quant_module = IntegerQuantizer
             elif quant_type == 'float-quant':
                 self.act_quant_module = FloatQuantizer
-            elif quant_type == 'hif4':
-                self.act_quant_module = HiFloat4Quantizer
-            else:
-                raise ValueError(
-                    f"Unsupported act quant_type: {quant_type}. "
-                    "Supported: int-quant, float-quant, hif4."
-                )
-            self.quant_config['act']['tp'] = self.tp
-            self.aquantizer = self.act_quant_module(**self.quant_config['act'])
             self.act_static = self.quant_config['act'].get('static', False)
             if self.act_static:
                 assert (
                     self.quant_config['act']['granularity'] == 'per_tensor'
                 ), 'Only support per_tensor static quant'
+                # Static activation quantization uses the batched calibration
+                # path, so normalize the default minmax setting to
+                # static_minmax to match the downstream calibration logic.
+                if self.quant_config['act'].get('calib_algo', 'minmax') == 'minmax':
+                    self.quant_config['act']['calib_algo'] = 'static_minmax'
+            self.quant_config['act']['tp'] = self.tp
+            self.aquantizer = self.act_quant_module(**self.quant_config['act'])
             self.quant_attn = self.quant_config['act'].get('quant_attn', False)
             if self.quant_attn:
                 assert self.config['model']['type'] in ['Vit', 'DeepseekV2']
@@ -217,8 +212,10 @@ class BaseBlockwiseQuantization(BlockwiseOpt):
             kv_special_cfg = self.quant_config['kvcache'].get('special', {})
             act_static_cfg = {}
             if self.act_static:
-                act_static_cfg.update(self.config.calib.n_sample)
-                act_static_cfg.update(self.config.calib.bs)
+                # The KV cache constructor expects num_samples / bsz, so map
+                # the calibration config fields to the parameter names it uses.
+                act_static_cfg['num_samples'] = self.config.calib.n_samples
+                act_static_cfg['bsz'] = self.config.calib.bs
             kv_quant_type = self.quant_config['kvcache'].get('quant_type', 'int-quant')
             self.kv_module = KV_REGISTRY[self.quant_config['kvcache']['method']](
                 kv_quant_type, self.quant_config['kvcache'],
@@ -458,9 +455,21 @@ class BaseBlockwiseQuantization(BlockwiseOpt):
                 h.remove()
             torch.cuda.empty_cache()
 
-            self.block_transform(block, input_feat, self.input['kwargs'])
+            if not self._is_ignored_block(self.block_idx):
+                self.block_transform(block, input_feat, self.input['kwargs'])
+            else:
+                logger.info(
+                    f'Block {self.block_idx} is in ignored_block_ids, '
+                    f'skipping block_transform.'
+                )
         else:
-            self.block_transform(block)
+            if not self._is_ignored_block(self.block_idx):
+                self.block_transform(block)
+            else:
+                logger.info(
+                    f'Block {self.block_idx} is in ignored_block_ids, '
+                    f'skipping block_transform.'
+                )
 
         if not self.data_free and self.quant_out:
             self.model.replace_module_block(
@@ -921,27 +930,45 @@ class BaseBlockwiseQuantization(BlockwiseOpt):
             if getattr(m, 'calib', None) is not None:
                 m.calib = mode
 
+    def _get_ignored_block_ids_set(self):
+        if not hasattr(self, '_ignored_block_ids_set_cache'):
+            expanded = []
+            for item in self.ignored_block_ids:
+                match = re.match(r'(\d+)-(\d+)', str(item))
+                if match:
+                    start, end = int(match.group(1)), int(match.group(2))
+                    expanded.extend(range(start, end + 1))
+                else:
+                    expanded.append(int(item))
+            self._ignored_block_ids_set_cache = set(expanded)
+        return self._ignored_block_ids_set_cache
+
+    def _is_ignored_block(self, block_idx):
+        if not self.mixed_precision or not self.ignored_block_ids:
+            return False
+        return block_idx in self._get_ignored_block_ids_set()
+
     def set_no_quant_layer(self):
         if self.ignored_speical_names:
             assert hasattr(self.model, 'block_name_prefix'), \
                 'block_name_prefix missing in model'
-        ignored_block_ids = []
-        for item in self.ignored_block_ids:
-            match = re.match(r'(\d+)-(\d+)', str(item))
-            if match:
-                start, end = int(match.group(1)), int(match.group(2))
-                ignored_block_ids.extend(range(start, end + 1))
-            else:
-                ignored_block_ids.append(int(item))
+        ignored_block_ids = self._get_ignored_block_ids_set()
+        # If no layer_names specified, skip all linear layers in the ignored blocks
+        skip_all_linears = not self.ignored_layer_names
 
         for idx, block in enumerate(self.blocks):
             for n, m in block.named_modules():
-                if idx in ignored_block_ids and n in self.ignored_layer_names:
-                    m.register_buffer('no_quant', torch.tensor(True))
-                else:
-                    layer_name = f'{self.model.block_name_prefix}.{idx}.{n}'
-                    if layer_name in self.ignored_speical_names:
+                if idx in ignored_block_ids:
+                    if skip_all_linears:
+                        if isinstance(m, tuple(_LLMC_LINEAR_TYPES_ + _TRANSFORMERS_LINEAR_TYPES_)):
+                            m.register_buffer('no_quant', torch.tensor(True))
+                    elif n in self.ignored_layer_names:
                         m.register_buffer('no_quant', torch.tensor(True))
+                else:
+                    if self.ignored_speical_names:
+                        layer_name = f'{self.model.block_name_prefix}.{idx}.{n}'
+                        if layer_name in self.ignored_speical_names:
+                            m.register_buffer('no_quant', torch.tensor(True))
 
     @torch.no_grad()
     def deploy(self, quant_format, keep_device=False):
@@ -1017,6 +1044,18 @@ class BaseBlockwiseQuantization(BlockwiseOpt):
                 if not param.is_contiguous():
                     param.data = param.data.contiguous()
 
+            if (
+                self.config.model.type in ['Wan2T2V']
+                and hasattr(self.model.Pipeline, 'transformer_2')
+                and self.model.Pipeline.transformer_2 is not None
+            ):
+                for name, param in self.model.Pipeline.transformer_2.named_parameters():
+                    if not param.is_contiguous():
+                        param.data = param.data.contiguous()
+                for name, param in self.model.Pipeline.transformer_2.named_buffers():
+                    if not param.is_contiguous():
+                        param.data = param.data.contiguous()
+
     @torch.no_grad()
     def save_model(self, path):
         if int(os.environ['RANK']) != 0:
@@ -1037,6 +1076,8 @@ class BaseBlockwiseQuantization(BlockwiseOpt):
             self.model.avlm_model.save_pretrained(path)
             logger.info('save model done --')
             self.copy_tokenizer(path)
+        elif self.config.model.type in ['Wan2T2V']:
+            self.model.save_wan2_2_pretrained(path)
         else:
             self.model.get_model().save_pretrained(path)
             logger.info('save model done --')

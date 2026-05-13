@@ -3,10 +3,11 @@ import os
 from abc import ABCMeta
 
 import torch
-from datasets import load_dataset, load_from_disk
 from loguru import logger
 from PIL import Image
 from torch.nn import functional as F
+
+from datasets import load_dataset, load_from_disk
 
 from .specified_preproc import PREPROC_REGISTRY
 
@@ -38,6 +39,7 @@ class BaseDataset(metaclass=ABCMeta):
         self.seed = calib_cfg['seed']
         self.calib_dataset_field_map = {
             'pileval': 'text',
+            'pile': 'text',
             'c4': 'text',
             'wikitext2': 'text',
             'ptb': 'sentence',
@@ -65,6 +67,10 @@ class BaseDataset(metaclass=ABCMeta):
             elif self.calib_dataset_name == 'ptb':
                 self.calib_dataset = load_dataset(
                     'ptb_text_only', 'penn_treebank', split='train'
+                )
+            elif self.calib_dataset_name == 'pile':
+                self.calib_dataset = load_dataset(
+                    'mit-han-lab/pile-val-backup', split='validation'
                 )
             elif self.calib_dataset_name == 'ultrachat':
                 self.calib_dataset = load_dataset(
@@ -168,7 +174,7 @@ class BaseDataset(metaclass=ABCMeta):
 
     def get_calib_dataset(self):
         samples = self.calib_dataset.shard(
-            num_shards=int(os.environ['WORLD_SIZE']), 
+            num_shards=int(os.environ['WORLD_SIZE']),
             index=int(os.environ['RANK'])
         )
         logger.info(f'len(samples) rank : {len(samples)}')

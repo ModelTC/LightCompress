@@ -5,11 +5,11 @@ from .deepseekv3 import DeepseekV3
 from .falcon import Falcon
 from .gemma2 import Gemma2
 from .glm4v import GLM4V
+from .industrialcoder import IndustrialCoder
 from .internlm2 import InternLM2
 from .internomni import InternOmni
 from .internvl2 import InternVL2
 from .internvl3_5 import InternVL3_5
-from .industrialcoder import IndustrialCoder
 from .llama import Llama
 from .llava import Llava
 from .llava_hf import LlavaHf
@@ -36,6 +36,6 @@ from .starcoder import Starcoder
 from .videollava import VideoLLaVA
 from .vila import Vila
 from .vit import Vit
+from .wan2_2_t2v import Wan2T2V
 from .wan_i2v import WanI2V
 from .wan_t2v import WanT2V
-from .wan2_2_t2v import Wan2T2V
