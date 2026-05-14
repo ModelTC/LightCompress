@@ -3,11 +3,10 @@ import os
 from abc import ABCMeta
 
 import torch
+from datasets import load_dataset, load_from_disk
 from loguru import logger
 from PIL import Image
 from torch.nn import functional as F
-
-from datasets import load_dataset, load_from_disk
 
 from .specified_preproc import PREPROC_REGISTRY
 
