@@ -27,12 +27,22 @@ class LlavaHf(Llama):
         if not self.use_cache:
             self.vlm_model_config.text_config.use_cache = False
         logger.info(f'self.vlm_model_config : {self.vlm_model_config}')
-        self.vlm_model = LlavaForConditionalGeneration.from_pretrained(
-            self.model_path,
-            config=self.vlm_model_config,
-            torch_dtype=self.torch_dtype,
-            low_cpu_mem_usage=True,
-        )
+        try:
+            # transformers >= 4.56: `dtype` is the replacement for `torch_dtype`
+            self.vlm_model = LlavaForConditionalGeneration.from_pretrained(
+                self.model_path,
+                config=self.vlm_model_config,
+                dtype=self.torch_dtype,
+                low_cpu_mem_usage=True,
+            )
+        except TypeError:
+            # transformers < 4.56: `dtype` is not accepted yet
+            self.vlm_model = LlavaForConditionalGeneration.from_pretrained(
+                self.model_path,
+                config=self.vlm_model_config,
+                torch_dtype=self.torch_dtype,
+                low_cpu_mem_usage=True,
+            )
         self.eval_name = 'LlavaHfEval'
         self.mm_model = self.vlm_model
         logger.info(f'self.vlm_model : {self.vlm_model}')
