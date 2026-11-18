@@ -197,12 +197,12 @@ config=${llmc}/configs/quantization/backend/sglang/rtn_w8a16.yml
 
 ### 1.4.1 推理服务
 
-默认情况下，它会在 http://localhost:10000 启动服务器。`model_path`替换成`save.save_path`路径下保存的`量化模型`即可。
+下面的命令显式使用 http://localhost:10000，与调用服务的请求地址保持一致。`model_path`替换成`save.save_path`路径下保存的`量化模型`即可。
 
 启动服务：
 
 ```
-python -m sglang.launch_server --model-path model_path
+python -m sglang.launch_server --model-path model_path --port 10000
 ```
 
 调用服务：
