@@ -191,12 +191,12 @@ Once LLMC finishes running, the quantized model will be stored at the `save.save
 
 ### 1.4.1 Inference Service
 
-By default, it will start the server at http://localhost:10000. Replace `model_path` with the `quantized model` saved under the `save.save_path`.
+The command below explicitly starts the server at http://localhost:10000, matching the request URL. Replace `model_path` with the `quantized model` saved under the `save.save_path`.
 
 Start the service:
 
 ```bash
-python -m sglang.launch_server --model-path model_path
+python -m sglang.launch_server --model-path model_path --port 10000
 ```
 
 Call the service:
